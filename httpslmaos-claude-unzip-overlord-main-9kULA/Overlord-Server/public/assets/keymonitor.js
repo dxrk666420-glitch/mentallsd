@@ -53,13 +53,13 @@ function updateStatus(className, text) {
 
 function connect() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/api/clients/${clientId}/keylogger/ws`;
+  const wsUrl = `${protocol}//${window.location.host}/api/clients/${clientId}/keymonitor/ws`;
 
   ws = new WebSocket(wsUrl);
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
-    console.log("Keylogger connected");
+    console.log("Keymonitor connected");
     updateStatus("pill-online", "Connected");
     requestFileList();
   };
@@ -79,7 +79,7 @@ function connect() {
   };
 
   ws.onclose = () => {
-    console.log("Keylogger disconnected");
+    console.log("Keymonitor disconnected");
     updateStatus("pill-offline", "Disconnected");
     setTimeout(() => connect(), 3000);
   };
@@ -96,7 +96,7 @@ function handleMessage(msg) {
 
   switch (msg.type) {
     case "ready":
-      console.log("Keylogger session ready");
+      console.log("Keymonitor session ready");
       break;
     case "status":
       if (msg.status === "offline") {
@@ -713,4 +713,4 @@ fileList.addEventListener("click", (event) => {
 });
 
 import("/assets/nav.js");
-checkFeatureAccess("keylogger", clientId).then(ok => ok && connect());
+checkFeatureAccess("keymonitor", clientId).then(ok => ok && connect());

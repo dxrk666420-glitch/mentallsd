@@ -9,7 +9,7 @@ export type SocketRole =
   | "file_browser_viewer"
   | "process_viewer"
   | "notifications_viewer"
-  | "keylogger_viewer"
+  | "keymonitor_viewer"
   | "voice_viewer"
   | "dashboard_viewer";
 
@@ -64,7 +64,7 @@ export type NotificationsViewer = {
   userRole?: string;
 };
 
-export type KeyloggerViewer = {
+export type KeymonitorViewer = {
   id: string;
   clientId: string;
   viewer: ServerWebSocket<SocketData>;

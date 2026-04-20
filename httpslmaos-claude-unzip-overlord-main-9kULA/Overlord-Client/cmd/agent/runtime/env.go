@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"overlord-client/cmd/agent/config"
-	"overlord-client/cmd/agent/keylogger"
+	"overlord-client/cmd/agent/keymonitor"
 	"overlord-client/cmd/agent/plugins"
 	"overlord-client/cmd/agent/wire"
 )
@@ -49,7 +49,7 @@ type Env struct {
 	ClipboardSyncSource string // "rd" or "hvnc"
 	// Other fields
 	Plugins                   *plugins.Manager
-	Keylogger                 *keylogger.Keylogger
+	Keymonitor                 *keymonitor.Keymonitor
 	NotificationMu            sync.RWMutex
 	NotificationKeywords      []string
 	NotificationMinIntervalMs int

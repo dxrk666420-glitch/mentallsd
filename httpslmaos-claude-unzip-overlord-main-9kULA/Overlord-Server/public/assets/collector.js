@@ -1,4 +1,4 @@
-/** stealer.js — standalone stealer drops viewer */
+/** collector.js — standalone collector drops viewer */
 
 let allDrops = [];
 let searchTerm = "";
@@ -17,7 +17,7 @@ async function fetchDrops() {
     allDrops = await res.json();
     render();
   } catch (e) {
-    console.error("Failed to fetch stealer drops", e);
+    console.error("Failed to fetch collector drops", e);
   }
 }
 
@@ -215,7 +215,7 @@ exportBtn.addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(allDrops, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `stealer-drops-${Date.now()}.json`;
+  a.download = `collector-drops-${Date.now()}.json`;
   a.click();
 });
 

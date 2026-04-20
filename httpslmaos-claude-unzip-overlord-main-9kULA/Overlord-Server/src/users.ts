@@ -414,7 +414,7 @@ export type FeatureName =
   | "webcam"
   | "file_browser"
   | "processes"
-  | "keylogger"
+  | "keymonitor"
   | "voice";
 
 export const ALL_FEATURES: FeatureName[] = [
@@ -424,7 +424,7 @@ export const ALL_FEATURES: FeatureName[] = [
   "webcam",
   "file_browser",
   "processes",
-  "keylogger",
+  "keymonitor",
   "voice",
 ];
 

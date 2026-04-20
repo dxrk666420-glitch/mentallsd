@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "loot-server",
+      "name": "archive-server",
       "dependencies": {
         "jose": "^6.1.3",
       },

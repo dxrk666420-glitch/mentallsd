@@ -70,14 +70,14 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  loot-server:
+  archive-server:
     build:
-      context: ./Loot-Server
+      context: ./Archive-Server
       dockerfile: Dockerfile
-    container_name: loot-server
+    container_name: archive-server
     network_mode: host
     environment:
-      LOOT_PORT: ${LOOT_PORT:-5175}
+      ARCHIVE_PORT: ${ARCHIVE_PORT:-5175}
       HOST: ${HOST:-0.0.0.0}
       DATA_DIR: /app/data
       JWT_SECRET: ${JWT_SECRET:-}

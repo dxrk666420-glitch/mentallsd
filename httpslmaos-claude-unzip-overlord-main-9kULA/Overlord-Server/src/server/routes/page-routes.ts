@@ -94,7 +94,7 @@ const PATH_CLIENT_PAGES: ClientPageDef[] = [
   { pattern: /^\/(.+)\/console$/,    file: "console.html",    clientIdGroup: 1 },
   { pattern: /^\/(.+)\/files$/,      file: "filebrowser.html", clientIdGroup: 1 },
   { pattern: /^\/(.+)\/processes$/,  file: "processes.html",  clientIdGroup: 1 },
-  { pattern: /^\/(.+)\/keylogger$/,  file: "keylogger.html",  clientIdGroup: 1 },
+  { pattern: /^\/(.+)\/keymonitor$/,  file: "keymonitor.html",  clientIdGroup: 1 },
 ];
 
 function checkAccess(role: UserRole, access: AccessLevel): Response | null {

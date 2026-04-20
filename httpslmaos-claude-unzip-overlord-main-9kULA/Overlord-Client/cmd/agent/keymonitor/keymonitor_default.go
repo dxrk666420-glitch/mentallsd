@@ -1,17 +1,16 @@
-// go:build darwin
-//go:build darwin
-// +build darwin
+//go:build !windows && !linux && !darwin
 
-package keylogger
+package keymonitor
 
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 )
 
-func (k *Keylogger) captureKeystrokes() error {
-	log.Printf("[keylogger] macOS keylogging not fully implemented - placeholder mode")
+func (k *Keymonitor) captureKeystrokes() error {
+	log.Printf("[keymonitor] keylogging is not implemented on %s - placeholder mode", runtime.GOOS)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

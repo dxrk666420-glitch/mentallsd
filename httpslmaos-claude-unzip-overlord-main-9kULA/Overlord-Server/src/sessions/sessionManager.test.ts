@@ -27,10 +27,10 @@ import {
   deleteProcessSession,
   getProcessSessionsByClient,
   getProcessSessionCount,
-  addKeyloggerSession,
-  getKeyloggerSession,
-  deleteKeyloggerSession,
-  getKeyloggerSessionsByClient,
+  addKeymonitorSession,
+  getKeymonitorSession,
+  deleteKeymonitorSession,
+  getKeymonitorSessionsByClient,
   addVoiceSession,
   getVoiceSession,
   deleteVoiceSession,
@@ -176,16 +176,16 @@ describe("sessionManager - process sessions", () => {
   });
 });
 
-describe("sessionManager - keylogger sessions", () => {
-  test("add, get, and delete keylogger session", () => {
+describe("sessionManager - keymonitor sessions", () => {
+  test("add, get, and delete keymonitor session", () => {
     const ws = mockWs();
-    addKeyloggerSession({ id: "kl-1", clientId: "c-kl", viewer: ws, createdAt: Date.now() });
+    addKeymonitorSession({ id: "kl-1", clientId: "c-kl", viewer: ws, createdAt: Date.now() });
 
-    expect(getKeyloggerSession("kl-1")).toBeDefined();
-    expect(getKeyloggerSessionsByClient("c-kl").length).toBe(1);
+    expect(getKeymonitorSession("kl-1")).toBeDefined();
+    expect(getKeymonitorSessionsByClient("c-kl").length).toBe(1);
 
-    expect(deleteKeyloggerSession("kl-1")).toBe(true);
-    expect(getKeyloggerSession("kl-1")).toBeUndefined();
+    expect(deleteKeymonitorSession("kl-1")).toBe(true);
+    expect(getKeymonitorSession("kl-1")).toBeUndefined();
   });
 });
 

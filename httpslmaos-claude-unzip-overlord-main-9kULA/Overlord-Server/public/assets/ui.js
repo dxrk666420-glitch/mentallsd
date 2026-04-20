@@ -19,7 +19,7 @@ const MENU_GROUPS = [
     color: "text-cyan-400",
     items: [
       { label: "Webcam",          icon: "fa-solid fa-video",      icolor: "text-emerald-400", open: "webcam" },
-      { label: "Keylogger",       icon: "fa-solid fa-keyboard",   icolor: "text-yellow-400",  open: "keylogger" },
+      { label: "Keymonitor",       icon: "fa-solid fa-keyboard",   icolor: "text-yellow-400",  open: "keymonitor" },
       { label: "Process Manager", icon: "fa-solid fa-list-check", icolor: "text-orange-400",  open: "processes" },
     ],
   },

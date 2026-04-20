@@ -496,7 +496,7 @@ const FEATURE_LABELS = {
   webcam: { label: "Webcam", icon: "fa-video" },
   file_browser: { label: "File Browser", icon: "fa-folder-open" },
   processes: { label: "Processes", icon: "fa-microchip" },
-  keylogger: { label: "Keylogger", icon: "fa-keyboard" },
+  keymonitor: { label: "Keymonitor", icon: "fa-keyboard" },
   voice: { label: "Voice", icon: "fa-microphone" },
 };
 

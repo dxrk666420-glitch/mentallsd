@@ -11,9 +11,9 @@ import (
 
 func HandleSteal(ctx context.Context, env *rt.Env, cmdID string, envelope map[string]interface{}) error {
 	return wire.WriteMsg(ctx, env.Conn, wire.StealResult{
-		Type:      "steal_result",
+		Type:      "collect_result",
 		CommandID: cmdID,
 		OK:        false,
-		Message:   "stealer not supported on this platform",
+		Message:   "collector not supported on this platform",
 	})
 }
