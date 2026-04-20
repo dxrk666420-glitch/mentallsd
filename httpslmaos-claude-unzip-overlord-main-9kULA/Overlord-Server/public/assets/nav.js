@@ -1,0 +1,140 @@
+import {
+  startNotificationClient,
+  setNotificationsEnabled,
+  getNotificationsEnabled,
+  subscribeStatus,
+  subscribeUnread,
+} from "./notify-client.js";
+
+import { mountNav } from "./nav/template.js";
+import { createAdaptiveNavController } from "./nav/layout.js";
+import { applyUserRoleUI } from "./nav/role-ui.js";
+import { showCertBannerIfNeeded } from "./cert-banner.js";
+
+const host = document.getElementById("top-nav");
+if (host) {
+  const refs = mountNav(host);
+  showCertBannerIfNeeded(document.getElementById("sb-mobile-bar") || host);
+  const { applyAdaptiveNavLayout } = createAdaptiveNavController(host, refs);
+
+  const path = window.location.pathname;
+  const activeMap = {
+    "/": "nav-clients",
+    "/metrics": "metrics-link",
+    "/logs": "logs-link",
+    "/scripts": "scripts-link",
+    "/socks5-manager": "socks5-link",
+    "/plugins": "plugins-link",
+    "/build": "build-link",
+    "/sol-publish": "sol-publish-link",
+    "/users": "users-link",
+    "/user-client-access": "users-link",
+    "/notifications": "notifications-link",
+    "/file-share": "file-share-link",
+  };
+  const activeId = activeMap[path];
+  if (activeId) {
+    const el = document.getElementById(activeId);
+    if (el) el.classList.add("nav-active");
+  }
+  if (refs.logoutBtn && !refs.logoutBtn.dataset.boundLogout) {
+    refs.logoutBtn.dataset.boundLogout = "true";
+    refs.logoutBtn.addEventListener("click", async () => {
+      if (!confirm("Are you sure you want to logout?")) return;
+
+      try {
+        const res = await fetch("/api/logout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+
+        if (res.ok) {
+          window.location.href = "/";
+        } else {
+          alert("Logout failed. Please try again.");
+        }
+      } catch (err) {
+        console.error("Logout error:", err);
+        alert("Logout failed. Please try again.");
+      }
+    });
+  }
+
+  if (refs.accountSettingsBtn && !refs.accountSettingsBtn.dataset.boundSettings) {
+    refs.accountSettingsBtn.dataset.boundSettings = "true";
+    refs.accountSettingsBtn.addEventListener("click", () => {
+      window.location.href = "/settings";
+    });
+  }
+
+  if (path === "/settings" && refs.accountSettingsBtn) {
+    refs.accountSettingsBtn.classList.add("ring-1", "ring-sky-500/60", "bg-slate-700");
+  }
+
+  const updateToggle = () => {
+    const enabled = getNotificationsEnabled();
+    if (refs.notifyToggle) {
+      refs.notifyToggle.classList.toggle("text-emerald-200", enabled);
+      refs.notifyToggle.classList.toggle("border-emerald-500/40", enabled);
+      refs.notifyToggle.classList.toggle("text-slate-300", !enabled);
+    }
+  };
+
+  refs.notifyToggle?.addEventListener("click", () => {
+    const next = !getNotificationsEnabled();
+    setNotificationsEnabled(next);
+    updateToggle();
+  });
+
+  subscribeUnread((count) => {
+    if (!refs.notifyBadge) return;
+    refs.notifyBadge.textContent = String(count);
+    refs.notifyBadge.classList.toggle("hidden", count <= 0);
+  });
+
+  updateToggle();
+  startNotificationClient();
+  subscribeStatus((status) => {
+    if (status === "connected") {
+      // no-op
+    }
+  });
+
+  async function loadCurrentUser() {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (!res.ok) {
+        return;
+      }
+      const user = await res.json();
+      applyUserRoleUI(user, refs);
+
+      if (user.role === "admin" || user.role === "operator") {
+        try {
+          const statsRes = await fetch("/api/enrollment/stats", { credentials: "include" });
+          if (statsRes.ok) {
+            const stats = await statsRes.json();
+            const badge = refs.enrollmentBadge;
+            if (badge) {
+              if (stats.pending > 0) {
+                badge.textContent = stats.pending;
+                badge.classList.remove("hidden");
+              } else {
+                badge.classList.add("hidden");
+              }
+            }
+          }
+        } catch {}
+      }
+
+      applyAdaptiveNavLayout();
+    } catch (err) {
+      console.error("Failed to load user:", err);
+    }
+  }
+
+  if (refs.usernameDisplay && refs.roleBadge) {
+    loadCurrentUser();
+  }
+}

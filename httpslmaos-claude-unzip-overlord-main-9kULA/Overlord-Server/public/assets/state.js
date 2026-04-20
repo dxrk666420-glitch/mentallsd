@@ -1,0 +1,14 @@
+export const state = {
+  page: 1,
+  pageSize: 12,
+  searchTerm: "",
+  sort: "stable",
+  filterStatus: "all",
+  filterOs: "all",
+  filterCountry: "all",
+  lastDigest: "",
+  isLoading: false,
+  pendingForce: false,
+  pendingReorder: false,
+  thumbnailsRequested: false,
+};

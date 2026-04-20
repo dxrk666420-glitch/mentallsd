@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stealer Drops - Overlord</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/tailwind.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
+    <style>
+      body { font-family: "Inter", sans-serif; }
+      .drop-card:hover { background-color: rgba(51, 65, 85, 0.4); }
+    </style>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100">
+    <header id="top-nav"></header>
+
+    <main class="px-5 py-6">
+      <div class="max-w-7xl mx-auto flex flex-col gap-5">
+
+        <!-- Header row -->
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2">
+            <span id="drop-count" class="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-slate-800 text-slate-400">
+              <i class="fa-solid fa-key"></i> 0 drops
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="refresh-btn"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm">
+              <i class="fa-solid fa-refresh"></i> Refresh
+            </button>
+            <button id="export-btn"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm">
+              <i class="fa-solid fa-download"></i> Export JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="flex items-center gap-2 px-4 py-3 bg-slate-900/70 border border-slate-800 rounded-lg">
+          <i class="fa-solid fa-magnifying-glass text-slate-500"></i>
+          <input id="search-input" type="text" placeholder="Search by URL, username, token..."
+            class="bg-transparent outline-none w-full text-slate-100 placeholder:text-slate-500" />
+        </div>
+
+        <!-- Drop list -->
+        <div id="drop-list" class="flex flex-col gap-4">
+          <!-- populated by stealer.js -->
+        </div>
+
+        <div id="empty-state" class="hidden text-center py-16 text-slate-500">
+          <i class="fa-solid fa-inbox text-4xl mb-3 block"></i>
+          No stealer drops yet. Build and deploy the standalone stealer binary to collect credentials.
+        </div>
+
+      </div>
+    </main>
+
+    <script type="module" src="/assets/nav.js"></script>
+    <script type="module" src="/assets/stealer.js"></script>
+  </body>
+</html>

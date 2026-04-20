@@ -1,0 +1,12 @@
+{
+  "name": "overlord-crypter",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --hot run src/index.ts"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  }
+}

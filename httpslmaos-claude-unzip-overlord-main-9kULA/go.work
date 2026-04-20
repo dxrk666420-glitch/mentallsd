@@ -1,0 +1,6 @@
+go 1.26.0
+
+use (
+	./Overlord-Client
+	./plugin-sample-go/native
+)
