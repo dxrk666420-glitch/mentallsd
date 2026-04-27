@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Overlord Dashboard</title>
+    <link rel="stylesheet" href="/vendor/inter/400.css" />
+    <link rel="stylesheet" href="/vendor/inter/600.css" />
+    <link rel="stylesheet" href="/vendor/inter/700.css" />
+<link rel="stylesheet" href="/assets/tailwind.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="/vendor/flag-icons/css/flag-icons.min.css" />
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
+    <link rel="stylesheet" href="/assets/main.css" />
+    <link rel="stylesheet" href="/assets/custom.css" />
+    <script defer src="/vendor/animejs/anime.min.js"></script>
+    <link rel="preload" href="/api/clients?page=1&amp;pageSize=12&amp;q=&amp;sort=stable&amp;status=all&amp;os=all&amp;country=all&amp;group=all" as="fetch" crossorigin />
+    <link rel="preload" href="/api/auth/me" as="fetch" crossorigin />
+    <link rel="preload" href="/api/groups" as="fetch" crossorigin />
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100">
+    <header id="top-nav"></header>
+    <main class="px-5 py-6">
+      <div id="clients-shell" class="w-full flex flex-col gap-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h1 class="text-2xl font-semibold">Clients</h1>
+            <p class="text-slate-400">KDOT wants YOU to have a good day!</p>
+            <p id="server-version-text" class="text-xs text-slate-500 mt-1">
+              Server version: loading...
+            </p>
+          </div>
+          <span
+            class="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-slate-800/70 text-slate-300 border border-slate-600/60"
+            id="total-pill"
+            >0 online</span
+          >
+        </div>
+        <div class="flex flex-wrap gap-3 items-center">
+          <label
+            id="search-shell"
+            class="flex items-center gap-2 bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-2 w-full sm:w-auto flex-1"
+          >
+            <i class="fa-solid fa-magnifying-glass text-slate-500"></i>
+            <input
+              id="search"
+              class="bg-transparent outline-none w-full placeholder:text-slate-500"
+              type="search"
+              placeholder="Search by nickname, host, user, id"
+            />
+          </label>
+          <label
+            class="inline-flex items-center gap-2 bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-2 text-slate-300"
+          >
+            <input
+              id="toggle-offline"
+              type="checkbox"
+              class="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-600"
+              checked
+            />
+            <span class="text-sm text-slate-300">Show offline</span>
+          </label>
+          <select
+            id="filter-status"
+            class="bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-2 text-slate-300"
+          >
+            <option value="all">All Status</option>
+            <option value="online">Online Only</option>
+            <option value="offline">Offline Only</option>
+          </select>
+          <select
+            id="filter-os"
+            class="bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-2 text-slate-300"
+          >
+            <option value="all">All OS</option>
+          </select>
+          <select
+            id="filter-group"
+            class="bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-2 text-slate-300"
+          >
+            <option value="all">All Groups</option>
+            <option value="none">No Group</option>
+          </select>
+          <div id="country-picker-anchor" class="relative"></div>
+          <select
+            id="sort"
+            class="bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-2 text-slate-300"
+          >
+            <option value="stable">Default</option>
+            <option value="last_seen_desc">Newest</option>
+            <option value="host_asc">Host A→Z</option>
+            <option value="ping_asc">Ping ↑</option>
+            <option value="ping_desc">Ping ↓</option>
+            <option value="country_asc">Country A→Z</option>
+            <option value="country_desc">Country Z→A</option>
+            <option value="group_asc">Group A→Z</option>
+            <option value="group_desc">Group Z→A</option>
+            <option value="admin_first">Admin first</option>
+          </select>
+          <button
+            id="select-all"
+            class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 border border-slate-700/60 transition-colors"
+          >
+            <i class="fa-solid fa-check"></i> Select all
+          </button>
+          <button
+            id="clear-selection"
+            class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-slate-400 border border-slate-700/60 transition-colors"
+          >
+            Clear selection
+          </button>
+        </div>
+        <!-- Bulk Actions Toolbar -->
+        <div
+          id="bulk-toolbar"
+          class="hidden bg-slate-800/70 border border-slate-700/60 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3"
+        >
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-check-double text-slate-400"></i>
+            <span class="text-slate-300"
+              ><span id="selected-count">0</span> selected</span
+            >
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button
+              id="bulk-screenshot"
+              class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 border border-slate-600/60 transition-colors"
+            >
+              <i class="fa-solid fa-camera"></i> Screenshot
+            </button>
+            <button
+              id="bulk-disconnect"
+              class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-red-950/60 text-red-300 border border-red-900/60 transition-colors"
+            >
+              <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
+            </button>
+            <button
+              id="bulk-uninstall"
+              class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-rose-950/60 text-rose-300 border border-rose-900/60 transition-colors"
+            >
+              <i class="fa-solid fa-trash"></i> Uninstall
+            </button>
+            <button
+              id="bulk-group"
+              class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 border border-slate-600/60 transition-colors"
+            >
+              <i class="fa-solid fa-layer-group"></i> Set Group
+            </button>
+            <button
+              id="bulk-clear"
+              class="px-3 py-2 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-slate-400 border border-slate-600/60 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        <div id="grid" class="flex flex-col gap-3 min-h-[420px]"></div>
+        <div id="pagination" class="flex items-center justify-center gap-3 py-4" style="visibility:hidden">
+          <button
+            id="prev"
+            class="px-4 py-2 rounded-lg border border-slate-700/60 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 disabled:opacity-40"
+            disabled
+          >
+            Prev
+          </button>
+          <span class="text-slate-400" id="page-label"></span>
+          <button
+            id="next"
+            class="px-4 py-2 rounded-lg border border-slate-700/60 bg-slate-800/70 hover:bg-slate-700/70 text-slate-300 disabled:opacity-40"
+            disabled
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/assets/nav.js"></script>
+    <script defer src="/assets/toast.js"></script>
+    <script defer src="/assets/ripple.js"></script>
+    <script type="module" src="/assets/main.js"></script>
+  </body>
+</html>

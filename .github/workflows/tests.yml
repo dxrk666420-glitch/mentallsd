@@ -1,0 +1,86 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      client: ${{ steps.filter.outputs.client }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'Overlord-Server/**'
+            client:
+              - 'Overlord-Client/**'
+              - 'go.work'
+              - 'go.work.sum'
+
+  server-tests:
+    needs: changes
+    if: needs.changes.outputs.server == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: Overlord-Server
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install server dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run server tests
+        run: bun test ./src
+
+  client-tests:
+    needs: changes
+    if: needs.changes.outputs.client == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: Overlord-Client
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: Overlord-Client/go.mod
+          cache: true
+          cache-dependency-path: |
+            Overlord-Client/go.sum
+            go.work.sum
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run client tests
+        run: go test ./...

