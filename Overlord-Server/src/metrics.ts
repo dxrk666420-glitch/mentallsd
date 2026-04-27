@@ -274,7 +274,7 @@ class MetricsCollector {
 
     this.history.push(historyEntry);
 
-    if (this.history.length > this.maxHistoryPoints * 2) {
+    if (this.history.length > this.maxHistoryPoints) {
       this.history = this.history.slice(-this.maxHistoryPoints);
     }
   }
