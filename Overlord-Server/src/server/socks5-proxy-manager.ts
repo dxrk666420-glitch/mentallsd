@@ -48,6 +48,8 @@ type ProxySocketData = {
   buffer: Buffer;
 };
 
+const MAX_PENDING_DATA_BYTES = 1 * 1024 * 1024; // 1 MB
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 /** port → ProxyEntry */
@@ -306,6 +308,13 @@ function handleSocksData(
       return;
     }
     if (!tunnel.connected) {
+      const pendingSize = tunnel.pendingData.reduce((sum, b) => sum + b.length, 0);
+      if (pendingSize + incoming.length > MAX_PENDING_DATA_BYTES) {
+        logger.warn(`[socks5] pending data exceeded ${MAX_PENDING_DATA_BYTES} bytes for conn=${connectionId}, closing`);
+        entry.connections.delete(connectionId);
+        socket.end();
+        return;
+      }
       tunnel.pendingData.push(incoming);
       return;
     }

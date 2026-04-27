@@ -30,11 +30,21 @@ type WsViewerClusterDeps = {
   consumeHttpDownloadPayload: (payload: any) => Promise<void> | void;
 };
 
-const fileBrowserCommandSessions = new Map<string, string>();
+const fileBrowserCommandSessions = new Map<string, { sessionId: string; createdAt: number }>();
+const FILE_BROWSER_COMMAND_TTL_MS = 10 * 60 * 1000;
+
+function pruneFileBrowserCommandSessions(): void {
+  const cutoff = Date.now() - FILE_BROWSER_COMMAND_TTL_MS;
+  for (const [commandId, entry] of fileBrowserCommandSessions) {
+    if (entry.createdAt < cutoff) {
+      fileBrowserCommandSessions.delete(commandId);
+    }
+  }
+}
+setInterval(pruneFileBrowserCommandSessions, 60_000);
 
 function trackFileBrowserCommand(commandId: string, sessionId: string): void {
-  fileBrowserCommandSessions.set(commandId, sessionId);
-  setTimeout(() => fileBrowserCommandSessions.delete(commandId), 10 * 60 * 1000);
+  fileBrowserCommandSessions.set(commandId, { sessionId, createdAt: Date.now() });
 }
 
 function decodeViewerPayload(raw: string | ArrayBuffer | Uint8Array): any | null {
@@ -259,7 +269,8 @@ export function handleFileBrowserMessage(clientId: string, payload: any, deps: W
   }
 
   const payloadCommandId = typeof payload?.commandId === "string" ? payload.commandId : undefined;
-  const ownerSessionId = payloadCommandId ? fileBrowserCommandSessions.get(payloadCommandId) : undefined;
+  const ownerEntry = payloadCommandId ? fileBrowserCommandSessions.get(payloadCommandId) : undefined;
+  const ownerSessionId = ownerEntry?.sessionId;
 
   let hasSession = false;
   for (const session of sessionManager.getFileBrowserSessionsByClient(clientId)) {

@@ -84,6 +84,7 @@ class MetricsCollector {
   private commandCount: number = 0;
   private commandTypeCount: Map<string, number> = new Map();
   private commandTimestamps: number[] = [];
+  private lastCommandTypeReset: number = Date.now();
 
   private bytesSent: number = 0;
   private bytesReceived: number = 0;
@@ -150,6 +151,10 @@ class MetricsCollector {
     const now = Date.now();
     this.commandTimestamps.push(now);
 
+    if (now - this.lastCommandTypeReset > 3600000) {
+      this.commandTypeCount.clear();
+      this.lastCommandTypeReset = now;
+    }
     const count = this.commandTypeCount.get(type) || 0;
     this.commandTypeCount.set(type, count + 1);
 
@@ -182,8 +187,8 @@ class MetricsCollector {
   recordPing(pingMs: number) {
     this.pingValues.push(pingMs);
 
-    if (this.pingValues.length > this.maxPingHistory) {
-      this.pingValues.shift();
+    if (this.pingValues.length > this.maxPingHistory * 2) {
+      this.pingValues = this.pingValues.slice(-this.maxPingHistory);
     }
   }
 
@@ -214,8 +219,8 @@ class MetricsCollector {
       const now = Date.now();
       const delay = Math.max(0, now - last - intervalMs);
       this.eventLoopDelays.push(delay);
-      if (this.eventLoopDelays.length > this.maxEventLoopHistory) {
-        this.eventLoopDelays.shift();
+      if (this.eventLoopDelays.length > this.maxEventLoopHistory * 2) {
+        this.eventLoopDelays = this.eventLoopDelays.slice(-this.maxEventLoopHistory);
       }
       last = now;
     }, intervalMs);
@@ -232,8 +237,8 @@ class MetricsCollector {
     }
     if (Number.isFinite(durationMs)) {
       this.httpLatencies.push(durationMs);
-      if (this.httpLatencies.length > this.maxHttpLatencyHistory) {
-        this.httpLatencies.shift();
+      if (this.httpLatencies.length > this.maxHttpLatencyHistory * 2) {
+        this.httpLatencies = this.httpLatencies.slice(-this.maxHttpLatencyHistory);
       }
     }
   }
@@ -269,8 +274,8 @@ class MetricsCollector {
 
     this.history.push(historyEntry);
 
-    if (this.history.length > this.maxHistoryPoints) {
-      this.history.shift();
+    if (this.history.length > this.maxHistoryPoints * 2) {
+      this.history = this.history.slice(-this.maxHistoryPoints);
     }
   }
 

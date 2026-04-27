@@ -17,6 +17,7 @@ import * as sessionManager from "../../sessions/sessionManager";
 import type { SocketData } from "../../sessions/types";
 import type { ClientInfo } from "../../types";
 import { clearClientSyncState, handleFrame, handleHello, handlePing, handlePong } from "../../wsHandlers";
+import { clearThumbnail } from "../../thumbnails";
 import { getMaxPayloadLimit, getMessageByteLength, isAllowedClientMessageType } from "../../wsValidation";
 import { stopAllProxiesForClient } from "../socks5-proxy-manager";
 
@@ -782,6 +783,7 @@ export function handleWebSocketClose(
 
   const currentClient = clientManager.getClient(clientId);
   if (currentClient && currentClient.ws !== ws) {
+    clearClientSyncState(clientId);
     logger.info(`[close] ${clientId} code=${code} (superseded socket, skipping cleanup)`);
     return;
   }
@@ -811,6 +813,7 @@ export function handleWebSocketClose(
   clientManager.deleteClient(clientId);
   stopAllProxiesForClient(clientId);
   clearClientSyncState(clientId);
+  clearThumbnail(clientId);
   deps.notifyConsoleClosed(clientId, "Client disconnected");
   setOnlineState(clientId, false, storedDisconnectReason, storedDisconnectDetail);
   deps.clearPendingNotificationScreenshots(clientId);
