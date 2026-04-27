@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Overlord Login</title>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
+    <link rel="stylesheet" href="/vendor/inter/400.css" />
+    <link rel="stylesheet" href="/vendor/inter/600.css" />
+    <link rel="stylesheet" href="/vendor/inter/700.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="/assets/main.css" />
+    <link rel="stylesheet" href="/assets/custom.css" />
+    <script src="/vendor/animejs/anime.min.js"></script>
+  </head>
+  <body class="login-body">
+    <div class="login-particles">
+      <div class="particle"></div>
+      <div class="particle"></div>
+      <div class="particle"></div>
+      <div class="particle"></div>
+      <div class="particle"></div>
+    </div>
+    <div class="login-card">
+      <div class="login-crown-wrapper">
+        <i class="fa-solid fa-crown login-crown"></i>
+      </div>
+      <div class="brand login-brand">Overlord</div>
+      <h2 class="login-title">Sign in</h2>
+      <p class="muted login-subtitle">
+        Access your Overlord
+      </p>
+      <form id="login-form">
+        <div class="form-group">
+          <label class="label">Username</label>
+          <div class="input-row input-animated">
+            <i class="fa-solid fa-user"></i
+            ><input
+              id="user"
+              name="user"
+              type="text"
+              autocomplete="username"
+              required
+              placeholder="Enter username"
+            />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label">Password</label>
+          <div class="input-row input-animated">
+            <i class="fa-solid fa-lock"></i
+            ><input
+              id="pass"
+              name="pass"
+              type="password"
+              autocomplete="current-password"
+              required
+              placeholder="Enter password"
+            />
+          </div>
+        </div>
+        <button type="submit" class="button primary full login-btn">
+          <span class="btn-text">Sign in</span>
+          <i class="fa-solid fa-arrow-right btn-icon"></i>
+        </button>
+        <div id="error" class="error" aria-live="polite"></div>
+      </form>
+      <div id="register-link" style="text-align: center; margin-top: 1rem; display: none">
+        <a href="/register.html" class="muted" style="font-size: 0.85rem; text-decoration: underline"
+          >Don't have an account? Register</a
+        >
+      </div>
+    </div>
+    <script src="/assets/login.js"></script>
+  </body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "testing.exclude": {
+    "**/Overlord-Server/dist/**": true,
+    "**/dist/Overlord-Client/**": true,
+    "**/dist-clients/**": true
+  }
+}
