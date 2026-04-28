@@ -398,8 +398,20 @@ static inline void _hvnc_wcsncpy_s(wchar_t *dst, size_t dstSize, const wchar_t *
 
         if (occurrences == 0) return NULL;
 
-        // Calculate new length (prefix + modified path)
-        SIZE_T calcNewLength = prefixLength + normalizedLength + (occurrences * (replaceLen - searchLen));
+        // Calculate new length (prefix + modified path) with overflow check
+        SIZE_T extraPerOccurrence = replaceLen > searchLen ? replaceLen - searchLen : 0;
+        SIZE_T reductionPerOccurrence = searchLen > replaceLen ? searchLen - replaceLen : 0;
+        SIZE_T calcNewLength;
+        if (replaceLen >= searchLen) {
+            SIZE_T growth = occurrences * extraPerOccurrence;
+            if (extraPerOccurrence > 0 && growth / extraPerOccurrence != occurrences) return NULL;
+            calcNewLength = prefixLength + normalizedLength + growth;
+            if (calcNewLength < prefixLength + normalizedLength) return NULL;
+        } else {
+            SIZE_T shrinkage = occurrences * reductionPerOccurrence;
+            calcNewLength = prefixLength + normalizedLength - shrinkage;
+        }
+        if (calcNewLength > 32768) return NULL;
         WCHAR* newPath = (WCHAR*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (calcNewLength + 1) * sizeof(WCHAR));
         if (!newPath) return NULL;
 

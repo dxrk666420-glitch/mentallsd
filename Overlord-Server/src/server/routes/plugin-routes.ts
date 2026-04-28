@@ -434,7 +434,27 @@ export async function handlePluginRoutes(
     } catch {
       return new Response("Not found", { status: 404 });
     }
-    const args: string[] = Array.isArray(body.args) ? body.args.filter((a: any) => typeof a === "string") : [];
+
+    // Restrict args: reject any argument containing shell metacharacters or flag-like prefixes
+    // that could be used to hijack the spawned process.
+    const MAX_ARGS = 32;
+    const MAX_ARG_LENGTH = 4096;
+    const BLOCKED_ARG_PATTERN = /[;&|`$(){}[\]<>!\\]/;
+    const rawArgs: string[] = Array.isArray(body.args) ? body.args.filter((a: any) => typeof a === "string") : [];
+    if (rawArgs.length > MAX_ARGS) {
+      return new Response("Too many arguments", { status: 400 });
+    }
+    const args: string[] = [];
+    for (const arg of rawArgs) {
+      if (arg.length > MAX_ARG_LENGTH) {
+        return new Response("Argument too long", { status: 400 });
+      }
+      if (BLOCKED_ARG_PATTERN.test(arg)) {
+        return new Response("Argument contains blocked characters", { status: 400 });
+      }
+      args.push(arg);
+    }
+
     const stdinData: string = typeof body.stdin === "string" ? body.stdin : "";
     const timeoutMs: number = typeof body.timeoutMs === "number" && body.timeoutMs > 0 ? Math.min(body.timeoutMs, 60_000) : 30_000;
     // Ensure the binary is executable

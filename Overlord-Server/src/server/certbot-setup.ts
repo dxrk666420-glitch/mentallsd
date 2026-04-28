@@ -62,7 +62,7 @@ function isValidDomain(domain: string): boolean {
 function isValidEmail(email: string): boolean {
   const value = email.trim();
   if (!value || value.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(value);
 }
 
 export async function runCertbotSetup(
