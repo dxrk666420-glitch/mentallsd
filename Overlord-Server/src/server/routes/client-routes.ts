@@ -660,6 +660,15 @@ export async function handleClientRoutes(
             return new Response("Bad request", { status: 400 });
           }
 
+          // Block shell metacharacters in args/cwd to prevent command injection on agent
+          const BLOCKED_EXEC_CHARS = /[;&|`${}[\]<>!\\]/;
+          if (args.length > 4096 || BLOCKED_EXEC_CHARS.test(args)) {
+            return new Response("Arguments contain blocked characters", { status: 400 });
+          }
+          if (cwd.length > 4096 || BLOCKED_EXEC_CHARS.test(cwd)) {
+            return new Response("Working directory contains blocked characters", { status: 400 });
+          }
+
           const cmdId = uuidv4();
           target.ws.send(
             encodeMessage({
