@@ -303,7 +303,7 @@ export async function handleBuildRoutes(
         : undefined;
       const safeRequireAdmin = !!requireAdmin;
       const safeCriticalProcess = !!criticalProcess;
-      const VALID_OUTPUT_EXTENSIONS = new Set([".exe", ".scr", ".bat", ".cmd", ".pif", ".com"]);
+      const VALID_OUTPUT_EXTENSIONS = new Set([".exe", ".scr", ".bat", ".cmd", ".pif", ".com", ".jar"]);
       const safeOutputExtension =
         typeof outputExtension === "string" && VALID_OUTPUT_EXTENSIONS.has(outputExtension.toLowerCase())
           ? outputExtension.toLowerCase() : ".exe";
