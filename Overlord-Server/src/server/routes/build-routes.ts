@@ -135,16 +135,16 @@ export async function handleBuildRoutes(
       let safeServerUrl: string | undefined;
       if (typeof serverUrl === "string" && serverUrl.trim() !== "") {
         const trimmedUrl = serverUrl.trim();
-        // Reject URLs containing characters that could escape ldflags parsing
-        if (/["'`$\\;|&<>(){}\[\]\s]/.test(trimmedUrl) && !trimmedUrl.includes(",")) {
-          return Response.json(
-            { error: "Server URL contains invalid characters" },
-            { status: 400 },
-          );
-        }
-        // Validate each comma-separated entry is a well-formed URL
+        // Validate each comma-separated entry is a well-formed URL and reject dangerous characters
+        const DANGEROUS_CHARS = /["'`$\\;|&<>(){}\[\]\s]/;
         const entries = trimmedUrl.split(",").map((e) => e.trim()).filter(Boolean);
         for (const entry of entries) {
+          if (DANGEROUS_CHARS.test(entry)) {
+            return Response.json(
+              { error: "Server URL contains invalid characters" },
+              { status: 400 },
+            );
+          }
           try {
             const parsed = new URL(entry);
             if (parsed.protocol !== "https:" && parsed.protocol !== "http:" && parsed.protocol !== "wss:" && parsed.protocol !== "ws:") {
