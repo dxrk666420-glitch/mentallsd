@@ -490,7 +490,9 @@ func HandleFileUploadHTTP(ctx context.Context, env *agentRuntime.Env, cmdID stri
 		tlsConfig.RootCAs = pool
 	}
 
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
 		return wire.WriteMsg(ctx, env.Conn, wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: false, Message: err.Error()})
@@ -660,13 +662,7 @@ func HandleFileZip(ctx context.Context, env *agentRuntime.Env, cmdID string, sou
 		}
 
 		if !info.IsDir() {
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-			_, err = io.Copy(writer, file)
-			if err != nil {
+			if err := addFileToZip(writer, path); err != nil {
 				return err
 			}
 
@@ -719,6 +715,16 @@ func HandleFileZip(ctx context.Context, env *agentRuntime.Env, cmdID string, sou
 		Message:   "Zip created: " + zipPath,
 	}
 	return wire.WriteMsg(ctx, env.Conn, result)
+}
+
+func addFileToZip(w io.Writer, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = io.Copy(w, file)
+	return err
 }
 
 func HandleFileRead(ctx context.Context, env *agentRuntime.Env, cmdID string, path string, maxSize int64) error {

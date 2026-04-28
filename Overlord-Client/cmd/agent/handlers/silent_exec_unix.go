@@ -32,5 +32,9 @@ func startSilentProcess(command string, args []string, cwd string, _ bool) error
 		cmd.Stdout = nullFile
 		cmd.Stderr = nullFile
 	}
-	return cmd.Start()
+	startErr := cmd.Start()
+	if nullFile != nil {
+		_ = nullFile.Close()
+	}
+	return startErr
 }
