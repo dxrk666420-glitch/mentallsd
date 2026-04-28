@@ -47,7 +47,11 @@ func startSilentProcess(command string, args []string, cwd string, hideWindow bo
 		}
 
 		cmd.SysProcAttr = attr
-		return cmd.Start()
+		startErr := cmd.Start()
+		if nullFile != nil {
+			_ = nullFile.Close()
+		}
+		return startErr
 	}
 
 	switch ext {

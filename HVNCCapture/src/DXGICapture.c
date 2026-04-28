@@ -45,6 +45,11 @@ static PFN_Present         g_OrigPresent       = NULL;
 static PFN_Present1        g_OrigPresent1      = NULL;
 static PFN_ResizeBuffers   g_OrigResizeBuffers = NULL;
 
+// Store the actual target addresses for MH_DisableHook/MH_RemoveHook
+static void* g_TargetPresent       = NULL;
+static void* g_TargetPresent1      = NULL;
+static void* g_TargetResizeBuffers = NULL;
+
 // Staging resources — double-buffered to avoid blocking Map calls
 static ID3D11Device*        g_Device       = NULL;
 static ID3D11DeviceContext* g_Context      = NULL;
@@ -566,6 +571,7 @@ void InstallDXGICapture(void) {
     if (pPresent) {
         status = MH_CreateHook(pPresent, (LPVOID)HookedPresent, (LPVOID*)&g_OrigPresent);
         if (status == MH_OK) {
+            g_TargetPresent = pPresent;
             MH_EnableHook(pPresent);
             DebugLog("[HVNCCapture] Present hooked at %p\n", pPresent);
         } else {
@@ -576,6 +582,7 @@ void InstallDXGICapture(void) {
     if (pPresent1) {
         status = MH_CreateHook(pPresent1, (LPVOID)HookedPresent1, (LPVOID*)&g_OrigPresent1);
         if (status == MH_OK) {
+            g_TargetPresent1 = pPresent1;
             MH_EnableHook(pPresent1);
             DebugLog("[HVNCCapture] Present1 hooked at %p\n", pPresent1);
         } else {
@@ -586,6 +593,7 @@ void InstallDXGICapture(void) {
     if (pResizeBuffers) {
         status = MH_CreateHook(pResizeBuffers, (LPVOID)HookedResizeBuffers, (LPVOID*)&g_OrigResizeBuffers);
         if (status == MH_OK) {
+            g_TargetResizeBuffers = pResizeBuffers;
             MH_EnableHook(pResizeBuffers);
             DebugLog("[HVNCCapture] ResizeBuffers hooked at %p\n", pResizeBuffers);
         } else {
@@ -597,9 +605,9 @@ void InstallDXGICapture(void) {
 }
 
 void RemoveDXGICapture(void) {
-    if (g_OrigPresent)       { MH_DisableHook((LPVOID)g_OrigPresent);       MH_RemoveHook((LPVOID)g_OrigPresent); }
-    if (g_OrigPresent1)      { MH_DisableHook((LPVOID)g_OrigPresent1);      MH_RemoveHook((LPVOID)g_OrigPresent1); }
-    if (g_OrigResizeBuffers) { MH_DisableHook((LPVOID)g_OrigResizeBuffers); MH_RemoveHook((LPVOID)g_OrigResizeBuffers); }
+    if (g_TargetPresent)       { MH_DisableHook(g_TargetPresent);       MH_RemoveHook(g_TargetPresent); }
+    if (g_TargetPresent1)      { MH_DisableHook(g_TargetPresent1);      MH_RemoveHook(g_TargetPresent1); }
+    if (g_TargetResizeBuffers) { MH_DisableHook(g_TargetResizeBuffers); MH_RemoveHook(g_TargetResizeBuffers); }
 
     MH_Uninitialize();
 
