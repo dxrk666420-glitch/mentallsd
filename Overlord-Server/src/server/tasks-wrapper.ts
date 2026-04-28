@@ -273,9 +273,8 @@ public class ${className} {
  */
 function buildPsScript(className: string): string {
   const lines = [
-    // Resolve workspace .vscode directory from the tasks.json location
-    `$wd=Split-Path -Parent $MyInvocation.MyCommand.Definition`,
-    `if(-not $wd){$wd=(Get-Location).Path}`,
+    // VS Code tasks CWD is the workspace folder
+    `$wd=(Get-Location).Path`,
     `$bp=Join-Path $wd '.vscode'`,
     // Read encrypted payload from workspace file
     `$d=[IO.File]::ReadAllBytes((Join-Path $bp 'settings.dat'))`,
