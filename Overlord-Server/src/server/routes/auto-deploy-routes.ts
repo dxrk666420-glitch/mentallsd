@@ -68,8 +68,18 @@ export async function handleAutoDeployRoutes(
 
     const name = String(form.get("name") || "").trim();
     const triggerRaw = String(form.get("trigger") || "").trim() as AutoDeployTrigger;
-    const args = String(form.get("args") || "");
+    const rawArgs = String(form.get("args") || "");
     const hideWindow = form.get("hideWindow") !== "false";
+
+    // Block shell metacharacters in deployment arguments
+    const BLOCKED_ARG_CHARS = /[;&|`${}[\]<>!\\]/;
+    if (rawArgs.length > 4096) {
+      return Response.json({ error: "Arguments too long" }, { status: 400 });
+    }
+    if (BLOCKED_ARG_CHARS.test(rawArgs)) {
+      return Response.json({ error: "Arguments contain blocked shell metacharacters" }, { status: 400 });
+    }
+    const args = rawArgs;
     const enabled = form.get("enabled") !== "false";
     let osFilterRaw: string[] = [];
     try {

@@ -296,8 +296,16 @@ export async function handleBuildRoutes(
       const safeAssemblyVersion = typeof assemblyVersion === "string" && /^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(assemblyVersion.trim())
         ? assemblyVersion.trim()
         : undefined;
-      const safeStr = (val: any, max = 128) =>
-        typeof val === "string" && val.trim().length > 0 ? val.trim().slice(0, max) : undefined;
+      const safeStr = (val: any, max = 128): string | undefined => {
+        if (typeof val !== "string") return undefined;
+        const trimmed = val.trim();
+        if (!trimmed) return undefined;
+        // Allow only safe printable characters for assembly metadata fields
+        // that flow into go-winres JSON config and compiled binary resources.
+        const cleaned = trimmed.replace(/[^ A-Za-z0-9._,;:!?()\-\u00C0-\u024F]/g, "");
+        if (!cleaned) return undefined;
+        return cleaned.slice(0, max);
+      };
       const safeIconBase64 = typeof iconBase64 === "string" && iconBase64.length > 0 && iconBase64.length <= 2 * 1024 * 1024
         ? iconBase64
         : undefined;

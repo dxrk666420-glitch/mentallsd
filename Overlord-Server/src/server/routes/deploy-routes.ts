@@ -1,5 +1,7 @@
 import { createHash } from "crypto";
+import dns from "dns/promises";
 import fs from "fs/promises";
+import net from "net";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { authenticateRequest } from "../../auth";
@@ -8,6 +10,37 @@ import * as clientManager from "../../clientManager";
 import { metrics } from "../../metrics";
 import { encodeMessage } from "../../protocol";
 import { createUploadPull } from "./file-download-routes";
+
+/**
+ * Check whether an IP address is private, loopback, link-local or
+ * otherwise non-routable.  Works for both IPv4 and IPv6.
+ */
+function isPrivateIP(ip: string): boolean {
+  // Normalise IPv4-mapped IPv6 (::ffff:x.x.x.x)
+  let addr = ip;
+  if (addr.startsWith("::ffff:")) {
+    addr = addr.slice(7);
+  }
+  if (net.isIPv4(addr)) {
+    const parts = addr.split(".").map(Number);
+    if (parts[0] === 127) return true;                                  // loopback
+    if (parts[0] === 10) return true;                                   // 10.0.0.0/8
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
+    if (parts[0] === 192 && parts[1] === 168) return true;              // 192.168.0.0/16
+    if (parts[0] === 169 && parts[1] === 254) return true;              // link-local
+    if (parts[0] === 0) return true;                                    // 0.0.0.0/8
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true; // CGNAT
+    return false;
+  }
+  if (net.isIPv6(addr)) {
+    const lower = addr.toLowerCase();
+    if (lower === "::1") return true;                                   // loopback
+    if (lower.startsWith("fe80:")) return true;                         // link-local
+    if (lower.startsWith("fc") || lower.startsWith("fd")) return true;  // ULA
+    return false;
+  }
+  return false;
+}
 
 type RequestIpProvider = {
   requestIP: (req: Request) => { address?: string } | null | undefined;
@@ -113,18 +146,39 @@ export async function handleDeployRoutes(
       return new Response("Only http and https URLs are allowed", { status: 400 });
     }
 
+    // --- SSRF protection: resolve hostname and validate resolved IPs ---
     const hostname = parsed.hostname.toLowerCase();
+    // Quick-reject well-known internal hostnames before DNS resolution
     const BLOCKED_HOSTS = ["localhost", "metadata.google.internal", "169.254.169.254"];
     if (
       BLOCKED_HOSTS.includes(hostname) ||
       hostname.endsWith(".internal") ||
-      hostname.startsWith("127.") ||
-      hostname === "[::1]" ||
-      /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname) ||
-      hostname.startsWith("169.254.") ||
-      hostname.startsWith("0.")
+      hostname.endsWith(".local")
     ) {
       return new Response("URLs pointing to private/internal addresses are not allowed", { status: 400 });
+    }
+    // If the hostname is a raw IP, validate it directly
+    if (net.isIP(hostname)) {
+      if (isPrivateIP(hostname)) {
+        return new Response("URLs pointing to private/internal addresses are not allowed", { status: 400 });
+      }
+    } else {
+      // Resolve DNS and check all returned addresses
+      try {
+        const resolved = await dns.resolve4(hostname).catch(() => [] as string[]);
+        const resolved6 = await dns.resolve6(hostname).catch(() => [] as string[]);
+        const allIps = [...resolved, ...resolved6];
+        if (allIps.length === 0) {
+          return new Response("Could not resolve hostname", { status: 400 });
+        }
+        for (const ip of allIps) {
+          if (isPrivateIP(ip)) {
+            return new Response("URLs pointing to private/internal addresses are not allowed", { status: 400 });
+          }
+        }
+      } catch {
+        return new Response("DNS resolution failed", { status: 400 });
+      }
     }
 
     const rawFilename = path.basename(parsed.pathname) || "download.bin";
@@ -132,7 +186,9 @@ export async function handleDeployRoutes(
 
     let fileBytes: Uint8Array;
     try {
-      const fetchRes = await fetch(fileUrl);
+      // Disable automatic redirect following to prevent SSRF via redirect
+      // chaining (public URL → 302 → internal address).
+      const fetchRes = await fetch(fileUrl, { redirect: "error" });
       if (!fetchRes.ok) {
         return new Response(`Remote fetch failed: ${fetchRes.status}`, { status: 502 });
       }
@@ -179,11 +235,22 @@ export async function handleDeployRoutes(
 
     const uploadId = typeof body?.uploadId === "string" ? body.uploadId : "";
     const clientIds = Array.isArray(body?.clientIds) ? body.clientIds : [];
-    const args = typeof body?.args === "string" ? body.args : "";
+    const rawArgs = typeof body?.args === "string" ? body.args : "";
     const hideWindow = body?.hideWindow !== false;
     if (!uploadId || clientIds.length === 0) {
       return new Response("Bad request", { status: 400 });
     }
+
+    // Sanitize args: block shell metacharacters that could allow command
+    // chaining or injection on the agent side.
+    const BLOCKED_DEPLOY_ARG_CHARS = /[;&|`${}[\]<>!\\]/;
+    if (rawArgs.length > 4096) {
+      return new Response("Arguments too long", { status: 400 });
+    }
+    if (BLOCKED_DEPLOY_ARG_CHARS.test(rawArgs)) {
+      return new Response("Arguments contain blocked shell metacharacters", { status: 400 });
+    }
+    const args = rawArgs;
 
     const upload = deps.deployUploads.get(uploadId);
     if (!upload) {
