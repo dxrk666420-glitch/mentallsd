@@ -188,7 +188,7 @@ public class Main {
     // 9. Process base relocations (delta = actualBase - imageBase)
     long delta = actualBase - imageBase;
     if (delta != 0) {
-      int relocDirOff = is64 ? optOff + 136 : optOff + 120; // IMAGE_DIRECTORY_ENTRY_BASERELOC (index 5)
+      int relocDirOff = is64 ? optOff + 152 : optOff + 136; // IMAGE_DIRECTORY_ENTRY_BASERELOC (index 5)
       long relocRVA = u32(pe, relocDirOff);
       long relocSize = u32(pe, relocDirOff + 4);
       if (relocRVA > 0 && relocSize > 0) {

