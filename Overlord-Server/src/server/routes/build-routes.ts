@@ -132,10 +132,36 @@ export async function handleBuildRoutes(
 
       const safeRawServerList = !!rawServerList;
       const safeSolMemo = !!solMemo;
-      const safeServerUrl =
-        typeof serverUrl === "string" && serverUrl.trim() !== ""
-          ? serverUrl.trim()
-          : undefined;
+      let safeServerUrl: string | undefined;
+      if (typeof serverUrl === "string" && serverUrl.trim() !== "") {
+        const trimmedUrl = serverUrl.trim();
+        // Reject URLs containing characters that could escape ldflags parsing
+        if (/["'`$\\;|&<>(){}\[\]\s]/.test(trimmedUrl) && !trimmedUrl.includes(",")) {
+          return Response.json(
+            { error: "Server URL contains invalid characters" },
+            { status: 400 },
+          );
+        }
+        // Validate each comma-separated entry is a well-formed URL
+        const entries = trimmedUrl.split(",").map((e) => e.trim()).filter(Boolean);
+        for (const entry of entries) {
+          try {
+            const parsed = new URL(entry);
+            if (parsed.protocol !== "https:" && parsed.protocol !== "http:" && parsed.protocol !== "wss:" && parsed.protocol !== "ws:") {
+              return Response.json(
+                { error: `Invalid server URL protocol: ${parsed.protocol}` },
+                { status: 400 },
+              );
+            }
+          } catch {
+            return Response.json(
+              { error: `Invalid server URL: ${entry}` },
+              { status: 400 },
+            );
+          }
+        }
+        safeServerUrl = trimmedUrl;
+      }
 
       if (safeRawServerList && safeSolMemo) {
         return Response.json(

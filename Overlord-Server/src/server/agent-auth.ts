@@ -28,12 +28,21 @@ export function isAuthorizedAgentRequest(
 
   const token = agentToken?.trim();
   if (!token) {
-    logger.info("[auth] Agent auth disabled");
+    const nodeEnv = String(process.env.NODE_ENV || "development").toLowerCase();
+    if (nodeEnv === "production") {
+      logger.warn("[auth] SECURITY WARNING: Agent token is empty — all agent connections will be unauthenticated. Set auth.agentToken in config to secure agent connections.");
+    }
+    logger.info("[auth] Agent auth disabled (no token configured)");
     return true;
   }
 
   const headerToken = req.headers.get("x-agent-token");
   const queryToken = url.searchParams.get("token");
+
+  if (queryToken !== null) {
+    logger.warn("[auth] Agent authenticated via query string parameter — this is deprecated and insecure (token visible in logs/referrers). Use the x-agent-token header instead.");
+  }
+
   const isAuthed =
     (headerToken !== null && safeCompare(headerToken, token)) ||
     (queryToken !== null && safeCompare(queryToken, token));
