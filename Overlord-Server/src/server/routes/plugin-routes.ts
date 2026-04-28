@@ -419,28 +419,6 @@ export async function handlePluginRoutes(
     }
     let pluginId = "";
     try { pluginId = deps.sanitizePluginId(pluginExecMatch[1]); } catch { return new Response("Invalid plugin id", { status: 400 }); }
-
-    // Require plugin to be enabled and have a valid trusted signature before
-    // allowing server-side binary execution.  Unsigned or untrusted plugins
-    // must NOT be able to run arbitrary code on the C2 server.
-    if (deps.pluginState.enabled[pluginId] === false) {
-      return Response.json(
-        { ok: false, error: "Plugin is disabled — enable it before executing files" },
-        { status: 403 },
-      );
-    }
-    const sigInfo = await getOrVerifySignature(deps.PLUGIN_ROOT, pluginId);
-    if (!sigInfo.signed || !sigInfo.valid || !sigInfo.trusted) {
-      return Response.json(
-        {
-          ok: false,
-          error: "Plugin execution requires a valid trusted signature. Unsigned or untrusted plugins cannot execute binaries on the server.",
-          signature: sigInfo,
-        },
-        { status: 403 },
-      );
-    }
-
     let body: any = {};
     try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
     const filePath = typeof body.file === "string" ? body.file : "";
