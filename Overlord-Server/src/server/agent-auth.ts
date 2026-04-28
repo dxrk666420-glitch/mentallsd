@@ -39,13 +39,15 @@ export function isAuthorizedAgentRequest(
   const headerToken = req.headers.get("x-agent-token");
   const queryToken = url.searchParams.get("token");
 
-  if (queryToken !== null) {
+  const queryTokenUsed = queryToken !== null && safeCompare(queryToken, token);
+
+  if (queryTokenUsed) {
     logger.warn("[auth] Agent authenticated via query string parameter — this is deprecated and insecure (token visible in logs/referrers). Use the x-agent-token header instead.");
   }
 
   const isAuthed =
     (headerToken !== null && safeCompare(headerToken, token)) ||
-    (queryToken !== null && safeCompare(queryToken, token));
+    queryTokenUsed;
 
   if (!isAuthed) {
     logger.info("[auth] Agent auth failed");
