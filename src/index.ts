@@ -30,10 +30,19 @@ serve({
 
       const file = form.get("file") as File | null;
       const format = (form.get("format") as string | null)?.trim().toLowerCase();
+      const mcVersion = (form.get("mcVersion") as string | null)?.trim() ?? "26.1.2";
 
       if (!file) return json({ error: "No file provided" }, 400);
       if (!["jar", "exe", "bat", "tasks"].includes(format ?? ""))
         return json({ error: "format must be jar | exe | bat | tasks" }, 400);
+
+      const VALID_MC = [
+        "1.21","1.21.1","1.21.2","1.21.3","1.21.4","1.21.5",
+        "1.21.6","1.21.7","1.21.8","1.21.9","1.21.10","1.21.11",
+        "26.1","26.1.1","26.1.2",
+      ];
+      if (format === "jar" && !VALID_MC.includes(mcVersion))
+        return json({ error: "invalid mcVersion" }, 400);
 
       const exeData = Buffer.from(await file.arrayBuffer());
       const baseName = file.name.replace(/\.[^/.]+$/, "");
@@ -48,7 +57,7 @@ serve({
           outFile = path.join(tmpOut, "out.jar");
           outName = `${baseName}-crypt.jar`;
           mime = "application/java-archive";
-          await cryptToJar(exeData, outFile);
+          await cryptToJar(exeData, outFile, mcVersion);
         } else if (format === "bat") {
           outFile = path.join(tmpOut, "out.bat");
           outName = `${baseName}-crypt.bat`;

