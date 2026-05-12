@@ -1,0 +1,6 @@
+services:
+  crypter:
+    build: .
+    ports:
+      - "7641:7641"
+    restart: unless-stopped
